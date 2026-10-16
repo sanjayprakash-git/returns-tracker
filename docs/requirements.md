@@ -131,6 +131,7 @@ erDiagram
         text name "part type (Screen) or product name"
         text part_grade "Genuine, Premium aftermarket, Standard aftermarket"
         text supplier
+        int warranty_days "90 repairs, 180 recon, 30 or 90 accessories"
         real price "EUR"
         real cost "EUR"
     }
@@ -221,7 +222,7 @@ flowchart TD
 | BR-02 | Damage caused after a repair (drops, liquid) isn't covered; the outcome is "Declined" (a new paid repair). |
 | BR-03 | Change-of-mind refunds on phones and accessories are allowed within 14 days; after that, store credit at the manager's discretion. |
 | BR-04 | A faulty new phone can be refunded by the shop within 30 days; after that it goes to the manufacturer's warranty. |
-| BR-05 | Reconditioned phones carry a 180-day warranty; accessories carry 90 days. |
+| BR-05 | Reconditioned phones carry a 180-day warranty. Accessories carry 30 or 90 days depending on the product: 30 days for cases, screen protectors, cables, mounts and straps; 90 days for chargers, power banks, earbuds, speakers and memory. The warranty is stored on each item and shown on the form. |
 | BR-06 | Faulty parts and products are tagged for a supplier claim; workmanship and customer damage are never claimed. |
 | BR-07 | Comeback/return rate = returns ÷ jobs or units sold, for the same item and period. |
 
@@ -229,7 +230,7 @@ flowchart TD
 
 ## 8. Assumptions to confirm
 
-1. Warranty periods: 90 days on repairs, 180 days on reconditioned phones, 90 days on accessories.
+1. Warranty periods: 90 days on repairs, 180 days on reconditioned phones, 30 or 90 days on accessories depending on the product (confirmed by the shop).
 2. Part grades: genuine, premium aftermarket and standard aftermarket, each mostly from one main supplier.
 3. The reason list covers almost all real comebacks (anything else goes in notes).
 4. A free re-repair costs the shop the replacement part plus about €15 of technician time.

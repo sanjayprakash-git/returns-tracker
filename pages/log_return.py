@@ -31,6 +31,9 @@ with st.container(border=True):
         pool = pool[pool["brand"] == brand] if brand else pool.iloc[0:0]
         item_label = "Device · part · grade" if category == "Repair" else "Phone"
     item = c2.selectbox(item_label, pool["label"], index=None, placeholder="Search or choose")
+    warranty = int(pool.loc[pool["label"] == item, "warranty_days"].iloc[0]) if item else None
+    if warranty:
+        c2.caption(f"Warranty on this item: **{warranty} days**")
 
     sold_word = "Repair date" if category == "Repair" else "Purchase date"
     purchase_date = c1.date_input(sold_word, value=date.today() - timedelta(days=10),
@@ -57,7 +60,7 @@ with st.container(border=True):
                             key=f"claim-{category}-{reason}-{outcome}",
                             help="Suggested because the reason points to a faulty part or product.")
 
-    warnings = policy_warnings(category, reason, outcome, days) if reason and outcome and days >= 0 else []
+    warnings = policy_warnings(category, reason, outcome, days, warranty) if reason and outcome and days >= 0 else []
     for w in warnings:
         st.warning(f"**Outside policy:** {w}", icon="⚠️")
 

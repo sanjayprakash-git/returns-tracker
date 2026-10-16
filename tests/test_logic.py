@@ -25,6 +25,11 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(len(policy_warnings("Accessory", "Changed mind", "Refund", 15)), 1)
         self.assertEqual(policy_warnings("Accessory", "Changed mind", "Store credit", 30), [])
 
+    def test_accessory_warranty_depends_on_product(self):
+        self.assertEqual(policy_warnings("Accessory", "Faulty", "Exchange", 30, warranty_days=30), [])
+        self.assertEqual(len(policy_warnings("Accessory", "Faulty", "Exchange", 31, warranty_days=30)), 1)
+        self.assertEqual(policy_warnings("Accessory", "Faulty", "Exchange", 60, warranty_days=90), [])
+
     def test_faulty_new_phone_refund_after_30_days_is_flagged(self):
         self.assertEqual(len(policy_warnings("New phone", "Faulty", "Refund", 31)), 1)
 

@@ -56,7 +56,7 @@ REPAIR_WARRANTY_DAYS = 90        # BR-01
 CHANGE_OF_MIND_DAYS = 14         # BR-03
 NEW_PHONE_REFUND_DAYS = 30       # BR-04 (after that: manufacturer warranty)
 RECON_WARRANTY_DAYS = 180        # BR-05
-ACCESSORY_WARRANTY_DAYS = 90     # BR-06
+DEFAULT_ACCESSORY_WARRANTY_DAYS = 90  # BR-05: 30 or 90 days depending on the product
 
 
 def suggests_supplier_claim(category: str, reason: str) -> bool:
@@ -64,7 +64,8 @@ def suggests_supplier_claim(category: str, reason: str) -> bool:
     return category in ("Repair", "Accessory", "Reconditioned phone") and reason in SUPPLIER_FAULT
 
 
-def policy_warnings(category: str, reason: str, outcome: str, days: int) -> list[str]:
+def policy_warnings(category: str, reason: str, outcome: str, days: int,
+                    warranty_days: int | None = None) -> list[str]:
     """Return the ways a return breaks policy (empty list = within policy)."""
     w = []
     if category == "Repair":
@@ -84,6 +85,8 @@ def policy_warnings(category: str, reason: str, outcome: str, days: int) -> list
     if category == "Reconditioned phone" and reason in SUPPLIER_FAULT and days > RECON_WARRANTY_DAYS \
             and outcome != "Declined":
         w.append(f"Reconditioned phones have a {RECON_WARRANTY_DAYS}-day warranty (this is day {days}).")
-    if category == "Accessory" and reason == "Faulty" and days > ACCESSORY_WARRANTY_DAYS and outcome != "Declined":
-        w.append(f"Accessories have a {ACCESSORY_WARRANTY_DAYS}-day warranty (this is day {days}).")
+    if category == "Accessory" and reason == "Faulty" and outcome != "Declined":
+        limit = warranty_days or DEFAULT_ACCESSORY_WARRANTY_DAYS
+        if days > limit:
+            w.append(f"This accessory has a {limit}-day warranty (this is day {days}).")
     return w

@@ -45,29 +45,29 @@ RECON_PHONES = [("Apple", "iPhone 12", "Grade A", 349, 260), ("Apple", "iPhone 1
                 ("Apple", "iPhone 13", "Grade B", 379, 290), ("Apple", "iPhone 14", "Grade A", 529, 420),
                 ("Samsung", "Galaxy S22", "Grade A", 329, 240), ("Samsung", "Galaxy S23", "Grade A", 449, 350),
                 ("Google", "Pixel 7", "Grade A", 299, 220)]
-ACCESSORIES = [  # subcategory, name, price, cost, sales weight, return rate
-    ("Cases & protection", "Clear case", 15, 2.5, 12, 0.012),
-    ("Cases & protection", "Wallet case", 25, 5, 6, 0.014),
-    ("Cases & protection", "Rugged case", 30, 7, 4, 0.010),
-    ("Cases & protection", "Tempered glass protector", 15, 1.5, 22, 0.006),
-    ("Cases & protection", "Privacy screen protector", 20, 2.5, 5, 0.010),
-    ("Cases & protection", "Camera lens protector", 12, 1.5, 4, 0.008),
-    ("Charging", "USB-C cable", 12, 2.5, 14, 0.014),
-    ("Charging", "Lightning cable", 15, 3, 8, 0.018),
-    ("Charging", "20W USB-C charger", 25, 6, 9, 0.014),
-    ("Charging", "45W fast charger", 39, 11, 4, 0.030),
-    ("Charging", "Wireless charging pad", 35, 10, 3, 0.020),
-    ("Charging", "MagSafe charger", 39, 9, 3, 0.022),
-    ("Power banks", "Power bank 10,000mAh", 35, 11, 3, 0.016),
-    ("Power banks", "Power bank 20,000mAh", 49, 16, 2, 0.018),
-    ("Audio", "Wired earphones", 15, 3, 4, 0.012),
-    ("Audio", "Wireless earbuds", 45, 14, 5, 0.035),
-    ("Audio", "Bluetooth speaker", 39, 13, 2, 0.015),
-    ("Car & mounts", "Car mount", 20, 5, 3, 0.010),
-    ("Car & mounts", "Car charger", 18, 4, 3, 0.016),
-    ("Wearables", "Smartwatch strap", 19, 3, 3, 0.012),
-    ("Storage & memory", "MicroSD card 128GB", 22, 8, 3, 0.010),
-    ("Storage & memory", "USB flash drive 64GB", 15, 5, 2, 0.008),
+ACCESSORIES = [  # subcategory, name, price, cost, sales weight, return rate, warranty days
+    ("Cases & protection", "Clear case", 15, 2.5, 12, 0.012, 30),
+    ("Cases & protection", "Wallet case", 25, 5, 6, 0.014, 30),
+    ("Cases & protection", "Rugged case", 30, 7, 4, 0.010, 30),
+    ("Cases & protection", "Tempered glass protector", 15, 1.5, 22, 0.006, 30),
+    ("Cases & protection", "Privacy screen protector", 20, 2.5, 5, 0.010, 30),
+    ("Cases & protection", "Camera lens protector", 12, 1.5, 4, 0.008, 30),
+    ("Charging", "USB-C cable", 12, 2.5, 14, 0.014, 30),
+    ("Charging", "Lightning cable", 15, 3, 8, 0.018, 30),
+    ("Charging", "20W USB-C charger", 25, 6, 9, 0.014, 90),
+    ("Charging", "45W fast charger", 39, 11, 4, 0.030, 90),
+    ("Charging", "Wireless charging pad", 35, 10, 3, 0.020, 90),
+    ("Charging", "MagSafe charger", 39, 9, 3, 0.022, 90),
+    ("Power banks", "Power bank 10,000mAh", 35, 11, 3, 0.016, 90),
+    ("Power banks", "Power bank 20,000mAh", 49, 16, 2, 0.018, 90),
+    ("Audio", "Wired earphones", 15, 3, 4, 0.012, 30),
+    ("Audio", "Wireless earbuds", 45, 14, 5, 0.035, 90),
+    ("Audio", "Bluetooth speaker", 39, 13, 2, 0.015, 90),
+    ("Car & mounts", "Car mount", 20, 5, 3, 0.010, 30),
+    ("Car & mounts", "Car charger", 18, 4, 3, 0.016, 90),
+    ("Wearables", "Smartwatch strap", 19, 3, 3, 0.012, 30),
+    ("Storage & memory", "MicroSD card 128GB", 22, 8, 3, 0.010, 90),
+    ("Storage & memory", "USB flash drive 64GB", 15, 5, 2, 0.008, 90),
 ]
 STAFF = [("Ciarán B.", "technician"), ("Priya S.", "technician"), ("Aoife M.", "sales"),
          ("Tomás K.", "sales"), ("Mei L.", "manager")]
@@ -124,30 +124,30 @@ def _pick(rng, weights: dict):
 
 
 def _catalogue():
-    rows = []  # category, subcategory, brand, device, name, grade, supplier, price, cost
+    rows = []  # category, subcategory, brand, device, name, grade, supplier, warranty, price, cost
     for device, (brand, screen, battery, small) in DEVICES.items():
         for grade in SCREEN_GRADES:
-            rows.append(("Repair", None, brand, device, "Screen", grade, GRADE_SUPPLIER[grade],
+            rows.append(("Repair", None, brand, device, "Screen", grade, GRADE_SUPPLIER[grade], 90,
                          round(screen * GRADE_PRICE[grade]), round(screen * GRADE_COST[grade], 2)))
         for grade in BATTERY_GRADES:
             price = battery if grade == "Genuine" else round(battery * 0.75)
-            rows.append(("Repair", None, brand, device, "Battery", grade, GRADE_SUPPLIER[grade], price,
+            rows.append(("Repair", None, brand, device, "Battery", grade, GRADE_SUPPLIER[grade], 90, price,
                          round(price * GRADE_COST[grade], 2)))
-        rows.append(("Repair", None, brand, device, "Charging port flex", "Premium aftermarket", "Supplier B",
+        rows.append(("Repair", None, brand, device, "Charging port flex", "Premium aftermarket", "Supplier B", 90,
                      small, round(small * 0.3, 2)))
-        rows.append(("Repair", None, brand, device, "Sensor flex", "Premium aftermarket", "Supplier B",
+        rows.append(("Repair", None, brand, device, "Sensor flex", "Premium aftermarket", "Supplier B", 90,
                      small + 30, round((small + 30) * 0.35, 2)))
         if brand != "OnePlus":
-            rows.append(("Repair", None, brand, device, "Back glass", "Standard aftermarket", "Supplier C",
+            rows.append(("Repair", None, brand, device, "Back glass", "Standard aftermarket", "Supplier C", 90,
                          small + 20, round((small + 20) * 0.25, 2)))
-        rows.append(("Repair", None, brand, device, "Camera", "Genuine", "Supplier A",
+        rows.append(("Repair", None, brand, device, "Camera", "Genuine", "Supplier A", 90,
                      small + 40, round((small + 40) * 0.45, 2)))
     for brand, device, price, cost in NEW_PHONES:
-        rows.append(("New phone", None, brand, device, "Brand new", None, "Distributor", price, cost))
+        rows.append(("New phone", None, brand, device, "Brand new", None, "Distributor", 30, price, cost))
     for brand, device, grade, price, cost in RECON_PHONES:
-        rows.append(("Reconditioned phone", None, brand, device, grade, None, "Refurb partner", price, cost))
-    for sub, name, price, cost, _, _ in ACCESSORIES:
-        rows.append(("Accessory", sub, "Universal", None, name, None, "Supplier D", price, cost))
+        rows.append(("Reconditioned phone", None, brand, device, grade, None, "Refurb partner", 180, price, cost))
+    for sub, name, price, cost, _, _, warranty in ACCESSORIES:
+        rows.append(("Accessory", sub, "Universal", None, name, None, "Supplier D", warranty, price, cost))
     return rows
 
 
@@ -177,7 +177,7 @@ def _repair_return(rng, brand, part, grade, supplier, day):
     return reason, days, outcome
 
 
-def _product_return(rng, category, subcategory, rate):
+def _product_return(rng, category, subcategory, rate, warranty=None):
     if rng.random() >= rate:
         return None
     if category == "Reconditioned phone":
@@ -189,6 +189,8 @@ def _product_return(rng, category, subcategory, rate):
         compat = 40 if subcategory in COMPAT_PRONE else 8
         reason = _pick(rng, {"Changed mind": 30, "Faulty": 45, "Not compatible with phone": compat})
     days = rng.randint(*DAYS[reason])
+    if category == "Accessory" and reason == "Faulty":
+        days = rng.randint(1, warranty + 20)
     if reason == "Changed mind":
         outcome = ("Refund" if rng.random() < 0.7 else "Store credit") if days <= 14 else \
                   ("Store credit" if rng.random() < 0.6 else "Refund")
@@ -196,6 +198,8 @@ def _product_return(rng, category, subcategory, rate):
         outcome = "Exchange"
     elif category == "New phone" and days > 30:
         outcome = "Declined"  # goes to manufacturer warranty
+    elif category == "Accessory" and days > warranty:
+        outcome = "Declined" if rng.random() < 0.85 else "Exchange"   # out of warranty
     else:
         outcome = "Exchange" if rng.random() < 0.6 else "Refund"
     return reason, days, outcome
@@ -204,10 +208,10 @@ def _product_return(rng, category, subcategory, rate):
 def seed(conn, rng_seed: int = 7) -> None:
     rng = random.Random(rng_seed)
     conn.executemany(
-        """INSERT INTO items (category, subcategory, brand, device, name, part_grade, supplier, price, cost)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""", _catalogue())
+        """INSERT INTO items (category, subcategory, brand, device, name, part_grade, supplier, warranty_days, price, cost)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", _catalogue())
     conn.executemany("INSERT INTO staff (name, role) VALUES (?, ?)", STAFF)
-    rows = conn.execute("SELECT id, category, subcategory, brand, device, name, part_grade, supplier FROM items").fetchall()
+    rows = conn.execute("SELECT id, category, subcategory, brand, device, name, part_grade, supplier, warranty_days FROM items").fetchall()
     staff = {role: [i for i, r in conn.execute("SELECT id, role FROM staff") if r == role]
              for role in ("technician", "sales", "manager")}
     repairs = {(r[4], r[5], r[6]): r for r in rows if r[1] == "Repair"}
@@ -225,7 +229,7 @@ def seed(conn, rng_seed: int = 7) -> None:
         if not START <= return_day <= END:
             return
         category = item[1]
-        flagged = bool(policy_warnings(category, reason, outcome, days))
+        flagged = bool(policy_warnings(category, reason, outcome, days, item[8]))
         claim = suggests_supplier_claim(category, reason) and outcome != "Declined" and rng.random() < 0.9
         handler = rng.choice(staff["technician"] if category == "Repair" else staff["sales"] + staff["manager"])
         returns.append((return_day.isoformat(), day.isoformat(), days, item[0], reason, outcome, handler,
@@ -255,12 +259,12 @@ def seed(conn, rng_seed: int = 7) -> None:
                     sales.append((day.isoformat(), item[0], seller, 1))
                 record(day, item, seller, _product_return(rng, category, None, rate))
         for _ in range(_poisson(rng, 20 * busy)):      # accessories
-            sub, name, _, _, _, rate = rng.choices(ACCESSORIES, weights=[a[4] for a in ACCESSORIES])[0]
+            sub, name, _, _, _, rate, warranty = rng.choices(ACCESSORIES, weights=[a[4] for a in ACCESSORIES])[0]
             item = accessories[name]
             seller = rng.choice(staff["sales"])
             if day >= START:
                 sales.append((day.isoformat(), item[0], seller, 1))
-            record(day, item, seller, _product_return(rng, "Accessory", sub, rate))
+            record(day, item, seller, _product_return(rng, "Accessory", sub, rate, warranty))
         day += timedelta(days=1)
 
     conn.executemany("INSERT INTO sales (sale_date, item_id, staff_id, quantity) VALUES (?, ?, ?, ?)", sales)

@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS items (
     name        TEXT NOT NULL,           -- part type for repairs (Screen), product name otherwise
     part_grade  TEXT,                    -- Genuine / Premium aftermarket / Standard aftermarket (repairs only)
     supplier    TEXT,
+    warranty_days INTEGER,               -- 90 repairs, 180 reconditioned, 30 or 90 accessories
     price       REAL NOT NULL CHECK (price > 0),
     cost        REAL NOT NULL CHECK (cost >= 0)
 );
