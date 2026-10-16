@@ -31,10 +31,8 @@ in_bin["oldest"] = in_bin["item_id"].map(oldest)
 open_claims = claims[claims["status"] == "Sent to supplier"]
 
 k1, k2, k3, k4 = st.columns(4)
-k1.metric("In the faulty bin", f"€{in_bin['value'].sum():,.0f}", f"{int(in_bin[stock.BIN].sum())} units",
-          delta_color="off")
-k2.metric("Waiting on suppliers", f"€{open_claims['value'].sum():,.0f}", f"{int(open_claims['quantity'].sum())} units",
-          delta_color="off")
+k1.metric(f"In the faulty bin ({int(in_bin[stock.BIN].sum())} units)", f"€{in_bin['value'].sum():,.0f}")
+k2.metric(f"Waiting on suppliers ({int(open_claims['quantity'].sum())} units)", f"€{open_claims['value'].sum():,.0f}")
 closed = claims[claims["status"] == "Closed"]
 k3.metric("Recovered", f"€{closed['recovered'].sum():,.0f}", help="Credit notes, refunds, replacement stock at cost")
 k4.metric("Written off", f"€{closed.loc[closed['resolution'] == 'Rejected - written off', 'value'].sum():,.0f}",
