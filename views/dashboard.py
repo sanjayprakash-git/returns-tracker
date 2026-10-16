@@ -32,10 +32,10 @@ k2.metric("Repair comeback rate", f"{len(rep_r) / rep_s['quantity'].sum():.1%}" 
 k3.metric("Cost of returns", f"€{analytics.cost_of_returns(r):,.0f}",
           help="Free re-repairs (part + labour), refunds, store credit and replacement stock")
 claims_in_period = db.claims_df(conn)
-claims_in_period = claims_in_period[(claims_in_period["created_date"].dt.date >= period[0])
-                                    & (claims_in_period["created_date"].dt.date <= period[1])]
-k4.metric("Recovered from suppliers", f"€{analytics.claim_summary(claims_in_period)['recovered']:,.0f}",
-          help="Credit notes, refunds and replacement stock from supplier claims logged in this period")
+claims_in_period = claims_in_period[(claims_in_period["sent_date"].dt.date >= period[0])
+                                    & (claims_in_period["sent_date"].dt.date <= period[1])]
+k4.metric("Recovered from suppliers", f"€{claims_in_period['recovered'].sum():,.0f}",
+          help="Credit notes, refunds and replacement stock from supplier returns sent in this period")
 k5.metric("Outside policy", int(r["out_of_policy"].sum()))
 
 with st.container(border=True):

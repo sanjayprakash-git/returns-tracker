@@ -4,7 +4,7 @@ import unittest
 
 import pandas as pd
 
-from tracker import analytics, db
+from tracker import analytics, db, stock
 from tracker.policy import policy_warnings, responsibility, suggests_supplier_claim
 from tracker.seed import seed
 
@@ -79,38 +79,53 @@ class AnalyticsTests(unittest.TestCase):
         self.assertAlmostEqual(analytics.supplier_recoverable(self.returns), 30 + 2.5)
 
 
-class ClaimTests(unittest.TestCase):
+class StockTests(unittest.TestCase):
+    """The stock ledger keeps shelf, faulty bin and supplier returns correct."""
+
     def setUp(self):
+        from datetime import date
+        self.d = date(2026, 7, 10)
         self.conn = sqlite3.connect(":memory:")
         db.init_db(self.conn)
         self.conn.execute("INSERT INTO staff (name, role) VALUES ('Tester', 'sales')")
         self.conn.execute("""INSERT INTO items (category, subcategory, brand, name, supplier, warranty_days, price, cost)
-                             VALUES ('Accessory', 'Power banks', 'Universal', 'Power bank 20,000mAh', 'Supplier D', 90, 49, 16)""")
+                             VALUES ('Accessory', 'Audio', 'Universal', 'Wireless earbuds', 'Atlantic', 90, 45, 14)""")
+        stock.receive_delivery(self.conn, self.d, 1, 10, 0, 1)
 
-    def test_faulty_customer_return_goes_into_faulty_stock(self):
-        from datetime import date
-        rid = db.add_return(self.conn, return_date=date(2026, 6, 14), purchase_date=date(2026, 6, 1), item_id=1,
-                            reason="Faulty", outcome="Refund", staff_id=1, supplier_claim=True, out_of_policy=False)
-        claims = db.claims_df(self.conn)
-        self.assertEqual(len(claims), 1)
-        self.assertEqual(claims.iloc[0]["return_id"], rid)
-        self.assertEqual(claims.iloc[0]["status"], "In faulty stock")
+    def test_faulty_swap_moves_one_to_bin_and_one_off_shelf(self):
+        db.add_return(self.conn, return_date=self.d, purchase_date=self.d, item_id=1, reason="Faulty",
+                      outcome="Exchange", staff_id=1, supplier_claim=True, out_of_policy=False)
+        self.assertEqual(stock.levels(self.conn, 1), {"shelf": 9, "faulty_bin": 1})
 
-    def test_claim_lifecycle_and_recovered_value(self):
-        from datetime import date
-        cid = db.add_claim(self.conn, created_date=date(2026, 6, 1), source="Damaged on delivery", item_id=1,
-                           quantity=3, problem="Box crushed / packaging damaged")
-        db.mark_claim_sent(self.conn, cid, date(2026, 6, 3), "RMA-1234")
-        self.assertEqual(db.claims_df(self.conn).iloc[0]["status"], "Sent to supplier")
-        db.close_claim(self.conn, cid, "Replacement stock", date(2026, 6, 12), replacement_qty=3)
-        claims = db.claims_df(self.conn)
-        summary = analytics.claim_summary(claims)
-        self.assertEqual(claims.iloc[0]["status"], "Closed")
-        self.assertAlmostEqual(summary["recovered"], 3 * 16)   # 3 replacement units at cost
-        self.assertEqual(summary["open_count"], 0)
-        card = analytics.supplier_scorecard(claims).set_index("supplier")
-        self.assertEqual(card.loc["Supplier D", "accepted_rate"], 1.0)
-        self.assertEqual(card.loc["Supplier D", "avg_days_to_resolve"], 9)
+    def test_faulty_refund_only_adds_to_bin(self):
+        db.add_return(self.conn, return_date=self.d, purchase_date=self.d, item_id=1, reason="Faulty",
+                      outcome="Refund", staff_id=1, supplier_claim=True, out_of_policy=False)
+        self.assertEqual(stock.levels(self.conn, 1), {"shelf": 10, "faulty_bin": 1})
+
+    def test_damaged_delivery_goes_to_bin(self):
+        stock.receive_delivery(self.conn, self.d, 1, 8, 2, 1, problem="Box crushed / packaging damaged")
+        self.assertEqual(stock.levels(self.conn, 1), {"shelf": 18, "faulty_bin": 2})
+
+    def test_supplier_return_and_replacement(self):
+        stock.found_faulty(self.conn, self.d, 1, 3, 1)
+        [claim] = stock.send_to_supplier(self.conn, self.d, {1: 3}, 1, "RMA-1")
+        self.assertEqual(stock.levels(self.conn, 1), {"shelf": 7, "faulty_bin": 0, "with_supplier": 3})
+        stock.close_claim(self.conn, claim, "Replacement stock", self.d, 1, replacement_qty=3)
+        self.assertEqual(stock.levels(self.conn, 1)["shelf"], 10)
+        self.assertAlmostEqual(db.claims_df(self.conn).iloc[0]["recovered"], 3 * 14)
+
+    def test_rejected_claim_is_written_off(self):
+        stock.found_faulty(self.conn, self.d, 1, 2, 1)
+        [claim] = stock.send_to_supplier(self.conn, self.d, {1: 2}, 1)
+        stock.close_claim(self.conn, claim, "Rejected - written off", self.d, 1)
+        self.assertEqual(stock.levels(self.conn, 1), {"shelf": 8, "faulty_bin": 0, "with_supplier": 0})
+
+    def test_stock_count_records_missing_units(self):
+        variance = stock.stock_count(self.conn, self.d, 1, 7, 1)
+        self.assertEqual(variance, -3)
+        self.assertEqual(stock.levels(self.conn, 1)["shelf"], 7)
+        moves = db.movements_df(self.conn)
+        self.assertEqual(int(moves.loc[moves["to_loc"] == stock.UNEXPLAINED, "quantity"].sum()), 3)
 
 
 class AuthTests(unittest.TestCase):
@@ -132,16 +147,20 @@ class AuthTests(unittest.TestCase):
 
 
 class SeedTests(unittest.TestCase):
-    def test_seed_is_mostly_repair_comebacks(self):
+    def test_seed_tells_the_go_live_story(self):
         conn = sqlite3.connect(":memory:")
         db.init_db(conn)
         seed(conn)
         total, repairs, bad = conn.execute(
             """SELECT COUNT(*), SUM(i.category = 'Repair'), SUM(r.days_since_purchase < 0)
                FROM returns r JOIN items i ON i.id = r.item_id""").fetchone()
-        self.assertTrue(220 <= total <= 340, total)
-        self.assertGreater(repairs / total, 0.6)
+        self.assertTrue(300 <= total <= 550, total)
+        self.assertGreater(repairs / total, 0.4)
         self.assertEqual(bad, 0)
+        levels = stock.levels_df(conn)
+        self.assertEqual(int((levels[["shelf", "faulty_bin", "with_supplier"]] < 0).sum().sum()), 0)
+        box = conn.execute("SELECT SUM(quantity) FROM stock_movements WHERE reason = 'Old faulty box counted at go-live'")
+        self.assertGreater(box.fetchone()[0], 0)
 
 
 if __name__ == "__main__":

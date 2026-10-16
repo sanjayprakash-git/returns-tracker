@@ -12,7 +12,7 @@ def sign_in():
     _, middle, _ = st.columns([1, 1.2, 1])
     with middle:
         st.title("📱 Returns Tracker")
-        st.caption("Repair comebacks, product returns and supplier claims for a phone repair & accessories shop.")
+        st.caption("Faulty stock, supplier returns and repair comebacks for a phone repair & electronics shop.")
         with st.form("sign-in"):
             username = st.text_input("Username")
             password = st.text_input("Password", type="password")
@@ -29,8 +29,8 @@ def sign_in():
                 if col.button(f"Try as {role}", width="stretch", key=f"demo-{username}"):
                     st.session_state.user = demo_user(conn, username)
                     st.rerun()
-            st.caption("The manager sees everything, including the dashboard. Technicians and sales staff log "
-                       "returns and manage supplier claims. Demo data and supplier names are fictional.")
+            st.caption("The manager also sees Loss & recovery and the repair dashboard. Demo data, staff and "
+                       "supplier names are fictional.")
 
 
 user = st.session_state.get("user")
@@ -44,11 +44,17 @@ with st.sidebar:
         del st.session_state.user
         st.rerun()
 
-pages = [
-    st.Page("views/log_return.py", title="Log a return", icon="📝", default=user["role"] != "manager"),
+is_manager = user["role"] == "manager"
+pages = {"Daily work": [
+    st.Page("views/counter.py", title="Counter", icon="🔁", default=not is_manager),
+    st.Page("views/log_return.py", title="Repair comebacks & returns", icon="📝"),
+    st.Page("views/stock_view.py", title="Stock", icon="📦"),
+    st.Page("views/supplier_claims.py", title="Faulty bin & suppliers", icon="♻️"),
     st.Page("views/returns_log.py", title="Returns log", icon="📋"),
-    st.Page("views/supplier_claims.py", title="Supplier claims", icon="📦"),
-]
-if user["role"] == "manager":
-    pages.append(st.Page("views/dashboard.py", title="Manager dashboard", icon="📊", default=True))
+]}
+if is_manager:
+    pages["Manager"] = [
+        st.Page("views/recovery_view.py", title="Loss & recovery", icon="💶", default=True),
+        st.Page("views/dashboard.py", title="Repair comebacks", icon="📊"),
+    ]
 st.navigation(pages).run()

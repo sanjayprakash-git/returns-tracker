@@ -13,8 +13,8 @@ items = db.items(conn)
 user = st.session_state.user
 
 st.title("📝 Log a return")
-st.caption(f"Repair comebacks and product returns, logged by **{user['name']}**. "
-           "Takes about 30 seconds; every field except notes is required.")
+st.caption(f"Repair comebacks, phone returns and non-faulty product returns, logged by **{user['name']}**. "
+           "For a quick faulty swap on a product, use **Counter**.")
 
 with st.container(border=True):
     category = st.segmented_control("What's coming back?", CATEGORIES, default="Repair")
@@ -57,9 +57,10 @@ with st.container(border=True):
 
     claim = False
     if reason and suggests_supplier_claim(category, reason):
-        claim = st.checkbox("Send part back to supplier for a claim (RMA)", value=outcome != "Declined",
-                            key=f"claim-{category}-{reason}-{outcome}",
-                            help="Suggested because the reason points to a faulty part or product.")
+        claim = st.checkbox("Keep the faulty unit for the supplier (moves it to the faulty bin)",
+                            value=outcome != "Declined", key=f"claim-{category}-{reason}-{outcome}",
+                            help="Suggested because the reason points to a faulty part or product. It goes back to "
+                                 "the supplier with the next return from Faulty bin & suppliers.")
 
     warnings = policy_warnings(category, reason, outcome, days, warranty) if reason and outcome and days >= 0 else []
     for w in warnings:
