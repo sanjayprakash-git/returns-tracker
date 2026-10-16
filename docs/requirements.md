@@ -1,30 +1,34 @@
 # Returns Tracker — Requirements
 
-**Project:** Returns tracking and analysis for a Samsung phone retailer
+**Project:** Repair comeback and returns tracking for a phone repair & accessories shop
 **Author:** Sanjay Prakash Ravi
-**Status:** v1.0 (built and deployed)
+**Status:** v2.0
 
 ---
 
 ## 1. Problem statement
 
-A phone shop selling Samsung Galaxy A-series and S-series phones handles several returns a week, but they are recorded inconsistently: on paper slips, in the POS notes field, or not at all when a phone is exchanged on the spot. As a result:
+The shop repairs phones (Apple, Samsung, Google Pixel, OnePlus) and sells new phones, reconditioned phones and accessories. Most of what comes back is **repair comebacks**: a fitted screen with ghost touch or lines, a replacement battery that drains fast, a sensor flex that stops Face ID or the fingerprint reader working. The rest are product returns.
 
-- **The manager can't answer basic questions:** which models come back most, why, and whether it's getting better or worse.
-- **Refunds are given outside policy,** for example change-of-mind returns after 14 days, because staff can't easily check the rules at the counter.
-- **Faulty-stock patterns are spotted late.** A batch with screen or battery faults is only noticed after customers complain repeatedly.
-- **Return rates can't be compared fairly,** because returns are never linked to how many units of each model were sold.
+Today these are handled at the counter and re-repaired, refunded or swapped, but rarely recorded in a structured way. As a result:
 
-**Goal:** give staff a 30-second way to log every return in a consistent format, and give the manager a dashboard that shows return rates, reasons and trends, so that stock, supplier and policy decisions are based on data.
+- **Nobody knows which parts fail.** The shop can't tell whether a standard aftermarket screen is a false economy compared with a premium or genuine one.
+- **Supplier credit is lost.** Faulty parts are binned instead of sent back for a claim (RMA), because there's no record of which supplier and batch they came from.
+- **Bad batches are spotted late.** A run of faulty batteries is only noticed after many customers have come back.
+- **Workmanship and part faults get mixed up.** Without a reason code, a fitting issue looks the same as a faulty part, so technician training needs are invisible.
+- **Warranty and returns policy is applied inconsistently.** Free re-repairs are given after the 90-day warranty, and change-of-mind refunds after 14 days.
+
+**Goal:** give staff a 30-second way to log every comeback and return in a consistent format, and give the manager a dashboard that shows which parts, grades and suppliers come back, what it costs, and how much can be claimed back.
 
 ### Success measures
 
 | Measure | Target |
 |---|---|
-| Returns logged in the system | 100% of returns (vs. an estimated 60–70% today) |
-| Time to log a return | Under 30 seconds |
-| Out-of-policy refunds | Flagged at the counter before they happen |
-| Manager reporting | Monthly return report available instantly instead of built by hand |
+| Comebacks and returns logged | 100% (vs. an estimated 50–60% today) |
+| Time to log one | Under 30 seconds |
+| Supplier claims raised for faulty parts | Every eligible part, with value tracked |
+| Out-of-policy re-repairs and refunds | Flagged at the counter before they happen |
+| Manager reporting | Instant, instead of nothing or a manual count |
 
 ---
 
@@ -32,78 +36,80 @@ A phone shop selling Samsung Galaxy A-series and S-series phones handles several
 
 | Stakeholder | Role | Needs | Influence |
 |---|---|---|---|
-| **Shop staff** | Process returns at the counter | Fast, simple form; clear guidance on policy; no double entry | High (daily users; adoption depends on them) |
-| **Store manager** | Owns returns policy, stock and supplier relationships | Return rate by model, top reasons, trends, refund cost | High (decision maker, sponsor) |
-| **Owner / area manager** | Oversees profitability across outlets | Monthly summary, refund value, comparison over time | Medium |
-| **Customers** | Return or exchange a phone | Quick, fair, consistent handling | Indirect |
-| **Samsung / supplier** | Handles warranty repairs and faulty-batch claims | Evidence of fault patterns by model | Indirect |
+| **Technicians** | Carry out repairs and re-repairs | Quick logging at the bench; clear reason codes; fair split between part faults and fitting issues | High (daily users; data quality depends on them) |
+| **Sales staff** | Handle phone and accessory returns at the counter | Simple form; policy guidance | High |
+| **Shop manager / owner** | Chooses suppliers and part grades, sets prices and policy | Comeback rates by part, grade and supplier; cost of returns; supplier claim value; trends | High (decision maker) |
+| **Parts suppliers** | Supply screens, batteries, flex cables | Evidence (part, date, fault) to accept warranty claims | Indirect |
+| **Customers** | Bring repairs and products back | Quick, fair, consistent handling | Indirect |
 
 ---
 
 ## 3. Scope
 
-**In scope (v1):** logging returns, viewing and filtering the returns log, a manager dashboard with return rates by model, reasons, monthly trend and outcome split, automatic insights, and a 14-day policy check.
+**In scope (v2):** logging repair comebacks and product returns across four types (repairs, new phones, reconditioned phones, accessories, with accessory groups); a filterable returns log; a manager dashboard with comeback rates by part and grade, worst repairs, reasons by responsibility, monthly trend, accessory returns by group, outcomes, cost of returns and claimable supplier value; automatic insights; warranty and policy checks.
 
-**Out of scope (v1):** POS integration, customer personal data, payment or refund processing, repair job tracking, multi-store login and permissions.
+**Out of scope:** POS or repair-ticketing integration, customer personal data, payment processing, the supplier claim workflow itself, stock control, multi-store logins.
 
 ---
 
 ## 4. User stories and acceptance criteria
 
-### Staff
+### Technicians and sales staff
 
-**US-01: Log a return**
-As a staff member, I want to log a return in one short form, so that every return is recorded consistently.
-- **Given** I open the "Log a return" page, **when** I fill in the purchase date, return date, model, reason, condition, outcome and my name and press Save, **then** the return is stored and I see a confirmation.
+**US-01: Log a comeback or return**
+As a staff member, I want to log anything that comes back in one short form, so that every case is recorded consistently.
+- I choose what's coming back (Repair, New phone, Reconditioned phone, Accessory), then brand or accessory type, then the exact item.
+- For a repair, the item identifies device, part and part grade (e.g. *iPhone 13 · Screen · Standard aftermarket*); the supplier comes from the item.
 - All fields except notes are required; the form can't be saved with any missing.
-- The form works on a tablet or phone at the counter.
 
-**US-02: Pick from standard options**
-As a staff member, I want to choose the model, reason and condition from lists, so that I don't have to type and the data stays consistent.
-- Model, reason, condition and outcome are dropdowns with fixed values (see the data model).
-- Free text is only allowed in the optional notes field.
+**US-02: Only see relevant options**
+As a staff member, I want reasons and outcomes that fit what's coming back, so that I can't record something impossible.
+- Repairs show repair reasons (e.g. ghost touch, lines/dead pixels, battery drain, sensor not working, part dead on arrival, fitting issue, customer damage) and repair outcomes (free re-repair, refund, declined).
+- Phones and accessories show product reasons and outcomes (refund, exchange, store credit, declined).
 
-**US-03: See days since purchase automatically**
-As a staff member, I want the system to calculate days since purchase from the two dates, so that I don't have to work it out.
-- Days since purchase = return date − purchase date, shown before saving.
-- A return date before the purchase date is rejected with an error message.
+**US-03: Days since repair or purchase calculated automatically**
+- Days = return date − repair/purchase date, shown before saving; a negative value is rejected with an error.
 
-**US-04: Be warned about out-of-policy refunds**
-As a staff member, I want a warning when a return is outside policy, so that I don't refund something I shouldn't.
-- **Given** the reason is "Changed mind" and it's more than 14 days since purchase, **when** I choose "Refund", **then** a warning explains it's outside the 14-day policy and suggests manager approval.
-- **Given** the reason is "Accidental damage", **when** I choose "Refund" or "Exchange", **then** a warning explains that accidental damage isn't covered.
-- Warnings don't block saving (the manager may approve exceptions), but the return is flagged as out of policy.
+**US-04: Be warned about out-of-policy decisions**
+As a staff member, I want a warning when a decision breaks policy, so that I check with the manager first.
+- A free re-repair or refund more than 90 days after a repair shows a warranty warning (BR-01).
+- Customer damage after a repair with any outcome other than "Declined" shows a warning (BR-02).
+- Change-of-mind refunds after 14 days show a warning (BR-03).
+- Warnings don't block saving; the record is flagged as out of policy for review.
 
-### Store manager
+**US-05: Raise supplier claims**
+As a technician, I want the form to suggest a supplier claim when a part is faulty, so that we get credit for bad parts.
+- When the reason is a part or product fault, a "Send part back to supplier (RMA)" option appears, ticked by default unless the outcome is "Declined".
+- Workmanship and customer-damage reasons never suggest a claim.
 
-**US-05: Browse and filter returns**
-As the store manager, I want to filter the returns log by date range, model, reason, outcome and staff member, so that I can investigate specific cases.
-- Filters can be combined; the table and the count update immediately.
-- The filtered list can be downloaded as CSV.
+### Manager
 
-**US-06: Compare return rates fairly**
-As the store manager, I want to see the return rate per model (returns ÷ units sold), so that popular models don't look worse just because they sell more.
-- Return rate is calculated per model for the selected period using the sales table.
-- Models are sorted from highest to lowest return rate.
+**US-06: Browse and filter**
+As the manager, I want to filter the log by date, type, brand, reason and outcome, and show only out-of-policy cases or supplier claims, so that I can investigate.
+- Filters combine; the count and total cost update; the view can be exported as CSV.
 
-**US-07: See why phones come back**
-As the store manager, I want to see the top return reasons, so that I can tell product faults from sales issues.
-- Reasons are ranked by count with their share of all returns.
-- Fault reasons (screen, battery, charging port) can be told apart from non-fault reasons (changed mind, wrong model, not as described).
+**US-07: Compare part grades**
+As the manager, I want comeback rates by part and grade (comebacks ÷ jobs), so that I can decide which grades are worth fitting.
+- Shown as a part × grade grid with the rate and the job count behind it.
 
-**US-08: Track the trend**
-As the store manager, I want to see returns and return rate by month, so that I know whether things are improving.
-- A monthly chart shows the return rate for each month in the selected period.
+**US-08: Find the worst repairs**
+As the manager, I want the device/part/grade combinations with the highest comeback rate, so that I can stop offering or change the supplier for them.
+- Only combinations with at least 30 jobs are ranked, so small numbers don't mislead.
 
-**US-09: Understand the cost of returns**
-As the store manager, I want to see the split between refunds, exchanges and repairs, and the total refunded value, so that I understand the financial impact.
-- The outcome split is shown as counts and percentages.
-- Refunded value = sum of the retail price of refunded phones.
+**US-09: Know who's responsible**
+As the manager, I want reasons grouped into part fault, workmanship, customer damage and sale-related, so that I know whether to act on suppliers, training or sales.
 
-**US-10: Get the headline without analysing charts**
-As the store manager, I want the dashboard to summarise the key findings in plain sentences, so that I can act quickly.
-- At least three automatically generated insights appear at the top: the model with the highest return rate, the top return reason and its share, and the month-on-month change.
-- The insights update with the selected filters.
+**US-10: Spot bad batches early**
+As the manager, I want to be alerted when a supplier's part has an unusual number of comebacks in a month, so that I can raise it before more customers are affected.
+- An insight appears when a supplier/part has 2.5× its typical monthly comebacks (and at least 8).
+
+**US-11: Understand the money**
+As the manager, I want the cost of returns and the value claimable from suppliers, so that I understand the financial impact.
+- Cost = part + labour for free re-repairs; price for refunds and store credit; replacement cost for exchanges.
+- Claimable = cost of parts/products marked for a supplier claim.
+
+**US-12: Get the headline without reading charts**
+- At least four automatically written insights appear at the top and update with the filters: grade comparison with avoidable comebacks, worst repair, bad-batch alert, claimable value, workmanship share.
 
 ---
 
@@ -111,53 +117,61 @@ As the store manager, I want the dashboard to summarise the key findings in plai
 
 ```mermaid
 erDiagram
-    PRODUCTS ||--o{ SALES : "sold as"
-    PRODUCTS ||--o{ RETURNS : "returned as"
-    STAFF ||--o{ SALES : makes
+    ITEMS ||--o{ SALES : "sold / repaired as"
+    ITEMS ||--o{ RETURNS : "came back as"
+    STAFF ||--o{ SALES : handles
     STAFF ||--o{ RETURNS : logs
 
-    PRODUCTS {
+    ITEMS {
         int id PK
-        text model "e.g. Galaxy A55"
-        text series "A-series or S-series"
-        real price "retail price, EUR"
+        text category "Repair, New phone, Reconditioned phone, Accessory"
+        text subcategory "accessory group, e.g. Charging"
+        text brand "Apple, Samsung, Google, OnePlus, Universal"
+        text device "e.g. iPhone 13"
+        text name "part type (Screen) or product name"
+        text part_grade "Genuine, Premium aftermarket, Standard aftermarket"
+        text supplier
+        real price "EUR"
+        real cost "EUR"
     }
     STAFF {
         int id PK
         text name
-        text role "staff or manager"
+        text role "technician, sales, manager"
     }
     SALES {
         int id PK
         date sale_date
-        int product_id FK
+        int item_id FK
         int staff_id FK
         int quantity
     }
     RETURNS {
         int id PK
         date return_date
-        date purchase_date
+        date purchase_date "repair or purchase date"
         int days_since_purchase
-        int product_id FK
+        int item_id FK
         text reason
-        text condition
-        text outcome "refund, exchange or repair"
+        text outcome
         int staff_id FK
+        int supplier_claim "0 or 1"
         int out_of_policy "0 or 1"
         text notes
     }
 ```
 
+One `items` table covers repair jobs and products, so comeback and return rates use the same formula: returns ÷ units sold or jobs done. No customer personal data is stored.
+
 **Reference values**
 
-| Field | Allowed values |
+| Field | Values |
 |---|---|
-| Reason | Changed mind · Faulty – screen · Faulty – battery · Faulty – charging port · Not as described · Wrong model bought · Network / connectivity issue · Accidental damage |
-| Condition | Sealed / unopened · Like new · Used – good · Damaged |
-| Outcome | Refund · Exchange · Repair |
-
-No customer personal data is stored.
+| Part types | Screen · Battery · Charging port flex · Sensor flex · Back glass · Camera |
+| Part grades | Genuine · Premium aftermarket · Standard aftermarket |
+| Accessory groups | Cases & protection · Charging · Power banks · Audio · Car & mounts · Wearables · Storage & memory |
+| Repair outcomes | Re-repair (free) · Refund · Declined |
+| Product outcomes | Refund · Exchange · Store credit · Declined |
 
 ---
 
@@ -167,33 +181,34 @@ No customer personal data is stored.
 
 ```mermaid
 flowchart TD
-    A[Customer brings phone back] --> B{Staff member decides}
-    B -->|Refund| C[Refund on POS]
-    B -->|Exchange| D[Swap phone from stock]
-    B -->|Faulty| E[Send for repair]
-    C --> F[Maybe a note in POS]
-    D --> G[Often not recorded]
-    E --> H[Paper repair slip]
-    F --> I[Manager builds report by hand<br/>from incomplete records]
-    G --> I
-    H --> I
+    A[Customer brings repair or product back] --> B{Whoever is at the counter decides}
+    B -->|Repair fault| C[Technician re-fits a part]
+    B -->|Product| D[Refund or swap]
+    C --> E[Old part binned]
+    D --> F[Maybe a note in POS]
+    E --> G[No record of part, grade or supplier]
+    F --> G
+    G --> H[Manager guesses which parts and suppliers are a problem]
 ```
 
-**Pain points:** decisions depend on who is at the counter; exchanges often go unrecorded; there's no policy check; reporting is manual and incomplete.
+**Pain points:** no record of which part, grade or supplier failed; faulty parts thrown away instead of claimed; workmanship issues hidden; policy depends on who's at the counter.
 
 ### Future process (to-be)
 
 ```mermaid
 flowchart TD
-    A[Customer brings phone back] --> B[Staff opens Log a return form]
-    B --> C[Enter dates, model, reason, condition]
-    C --> D{Policy check}
-    D -->|Within policy| E[Choose outcome and save]
-    D -->|Out of policy| F[Warning shown<br/>manager approval]
-    F --> E
-    E --> G[(Returns database)]
-    G --> H[Manager dashboard<br/>rates, reasons, trends, insights]
-    H --> I[Actions: supplier claims,<br/>stock mix, staff training]
+    A[Customer brings repair or product back] --> B[Staff open Log a return]
+    B --> C[Type → brand → device, part and grade]
+    C --> D[Reason and outcome]
+    D --> E{Policy check}
+    E -->|Within policy| F[Save]
+    E -->|Outside policy| G[Warning, manager approval] --> F
+    D --> H{Part fault?}
+    H -->|Yes| I[Part tagged for supplier claim]
+    I --> F
+    F --> J[(Returns database)]
+    J --> K[Manager dashboard and insights]
+    K --> L[Actions: change grade or supplier,<br/>raise claims, train technicians]
 ```
 
 ---
@@ -202,26 +217,26 @@ flowchart TD
 
 | ID | Rule |
 |---|---|
-| BR-01 | Change-of-mind returns are accepted for refund within 14 days of purchase; after that only exchange, at manager discretion. |
-| BR-02 | Faulty phones are repaired or exchanged under warranty; a refund is possible if the fault appears within 30 days. |
-| BR-03 | Accidental damage isn't covered by returns policy (repair is chargeable). |
-| BR-04 | Return rate = returns ÷ units sold for the same model and period. |
-| BR-05 | Every return must have a staff member recorded against it. |
+| BR-01 | Repairs carry a 90-day warranty on the part and labour; free re-repairs or refunds after that need manager approval. |
+| BR-02 | Damage caused after a repair (drops, liquid) isn't covered; the outcome is "Declined" (a new paid repair). |
+| BR-03 | Change-of-mind refunds on phones and accessories are allowed within 14 days; after that, store credit at the manager's discretion. |
+| BR-04 | A faulty new phone can be refunded by the shop within 30 days; after that it goes to the manufacturer's warranty. |
+| BR-05 | Reconditioned phones carry a 180-day warranty; accessories carry 90 days. |
+| BR-06 | Faulty parts and products are tagged for a supplier claim; workmanship and customer damage are never claimed. |
+| BR-07 | Comeback/return rate = returns ÷ jobs or units sold, for the same item and period. |
 
 ---
 
 ## 8. Assumptions to confirm
 
-These are based on typical Irish phone retail practice and should be checked against the real shop:
-
-1. The 14-day change-of-mind window and the 30-day "faulty refund" window match shop policy.
-2. The reason list covers almost all real returns (anything else goes in notes).
-3. One phone per return (no multi-unit returns).
-4. Staff are happy to log returns on the shop tablet or their phone.
-5. The manager's main decisions are supplier claims, stock mix and staff training.
+1. Warranty periods: 90 days on repairs, 180 days on reconditioned phones, 90 days on accessories.
+2. Part grades: genuine, premium aftermarket and standard aftermarket, each mostly from one main supplier.
+3. The reason list covers almost all real comebacks (anything else goes in notes).
+4. A free re-repair costs the shop the replacement part plus about €15 of technician time.
+5. Suppliers accept claims for parts that fail within warranty when the part, date and fault are recorded.
 
 ---
 
 ## 9. Demo data
 
-The live demo uses generated data only: 6 months of sales across 10 Samsung models and about 300 returns, with return rates that differ realistically by model and reason. No real customer or shop data is used.
+The live demo uses generated data only: 6 months of repair jobs, new and reconditioned phone sales and accessory sales (about 7,100 in total), and about 280 returns, mostly repair comebacks, with realistic patterns by part, grade and supplier. No real customer, supplier or shop data is used.

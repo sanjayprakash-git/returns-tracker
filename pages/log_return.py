@@ -1,43 +1,68 @@
-"""Page 1 — staff log a return (US-01 to US-04)."""
+"""Page 1 — staff log a repair comeback or product return (US-01 to US-05)."""
 from datetime import date, timedelta
 
 import streamlit as st
 
 from tracker import db
-from tracker.policy import CONDITIONS, OUTCOMES, REASONS, policy_warnings
+from tracker.policy import (CATEGORIES, OUTCOMES_BY_CATEGORY, REASONS, policy_warnings,
+                            responsibility, suggests_supplier_claim)
 
 conn = st.session_state.conn
-products = db.products(conn)
+items = db.items(conn)
 staff = db.staff(conn)
 
 st.title("📝 Log a return")
-st.caption("Takes about 30 seconds. Every field except notes is required.")
+st.caption("Repair comebacks and product returns. Takes about 30 seconds; every field except notes is required.")
 
 with st.container(border=True):
-    c1, c2 = st.columns(2)
-    purchase_date = c1.date_input("Purchase date", value=date.today() - timedelta(days=7),
-                                  max_value=date.today(), format="DD/MM/YYYY")
-    return_date = c2.date_input("Return date", value=date.today(), max_value=date.today(), format="DD/MM/YYYY")
+    category = st.segmented_control("What's coming back?", CATEGORIES, default="Repair")
+    if not category:
+        st.stop()
+    pool = items[items["category"] == category]
 
-    model = c1.selectbox("Phone model", products["model"], index=None, placeholder="Choose a model")
-    reason = c2.selectbox("Reason for return", REASONS, index=None, placeholder="Choose a reason")
-    condition = c1.selectbox("Condition", CONDITIONS, index=None, placeholder="Choose condition")
-    outcome = c2.radio("Outcome", OUTCOMES, index=None, horizontal=True)
+    c1, c2 = st.columns(2)
+    if category == "Accessory":
+        group = c1.selectbox("Accessory type", sorted(pool["subcategory"].unique()), index=None,
+                             placeholder="Choose a type")
+        pool = pool[pool["subcategory"] == group] if group else pool.iloc[0:0]
+        item_label = "Product"
+    else:
+        brand = c1.selectbox("Brand", sorted(pool["brand"].unique()), index=None, placeholder="Choose a brand")
+        pool = pool[pool["brand"] == brand] if brand else pool.iloc[0:0]
+        item_label = "Device · part · grade" if category == "Repair" else "Phone"
+    item = c2.selectbox(item_label, pool["label"], index=None, placeholder="Search or choose")
+
+    sold_word = "Repair date" if category == "Repair" else "Purchase date"
+    purchase_date = c1.date_input(sold_word, value=date.today() - timedelta(days=10),
+                                  max_value=date.today(), format="DD/MM/YYYY")
+    return_date = c2.date_input("Date it came back", value=date.today(), max_value=date.today(), format="DD/MM/YYYY")
+
+    reason = c1.selectbox("Reason", REASONS[category], index=None, placeholder="Choose a reason")
+    outcome = c2.radio("Outcome", OUTCOMES_BY_CATEGORY[category], index=None, horizontal=True)
     staff_name = c1.selectbox("Logged by", staff["name"], index=None, placeholder="Your name")
-    notes = c2.text_input("Notes (optional)", max_chars=200)
+    notes = c2.text_input("Notes (optional)", max_chars=200, placeholder="e.g. touch dead in top corner")
 
     days = (return_date - purchase_date).days
+    m1, m2 = st.columns(2)
     if days < 0:
-        st.error("The return date can't be before the purchase date.")
+        st.error("The return date can't be before the purchase/repair date.")
     else:
-        st.metric("Days since purchase", days)
+        m1.metric("Days since " + ("repair" if category == "Repair" else "purchase"), days)
+    if reason:
+        m2.metric("Responsibility", responsibility(reason))
 
-    warnings = policy_warnings(reason, outcome, days) if reason and outcome and days >= 0 else []
+    claim = False
+    if reason and suggests_supplier_claim(category, reason):
+        claim = st.checkbox("Send part back to supplier for a claim (RMA)", value=outcome != "Declined",
+                            key=f"claim-{category}-{reason}-{outcome}",
+                            help="Suggested because the reason points to a faulty part or product.")
+
+    warnings = policy_warnings(category, reason, outcome, days) if reason and outcome and days >= 0 else []
     for w in warnings:
-        st.warning(f"**Outside returns policy:** {w}", icon="⚠️")
+        st.warning(f"**Outside policy:** {w}", icon="⚠️")
 
-    missing = [label for label, v in [("model", model), ("reason", reason), ("condition", condition),
-                                       ("outcome", outcome), ("staff name", staff_name)] if not v]
+    missing = [label for label, v in [("item", item), ("reason", reason), ("outcome", outcome),
+                                       ("staff name", staff_name)] if not v]
     if st.button("Save return", type="primary", width="stretch"):
         if missing:
             st.error(f"Please fill in: {', '.join(missing)}.")
@@ -47,12 +72,13 @@ with st.container(border=True):
             new_id = db.add_return(
                 conn,
                 return_date=return_date, purchase_date=purchase_date,
-                product_id=int(products.loc[products["model"] == model, "id"].iloc[0]),
-                reason=reason, condition=condition, outcome=outcome,
+                item_id=int(items.loc[items["label"] == item, "id"].iloc[0]),
+                reason=reason, outcome=outcome,
                 staff_id=int(staff.loc[staff["name"] == staff_name, "id"].iloc[0]),
-                out_of_policy=bool(warnings), notes=notes.strip(),
+                supplier_claim=claim, out_of_policy=bool(warnings), notes=notes.strip(),
             )
-            flag = " It's flagged as outside policy for the manager to review." if warnings else ""
-            st.success(f"Return #{new_id} saved: {model}, {reason.lower()}, {outcome.lower()}.{flag}")
+            extra = " Flagged as outside policy for the manager to review." if warnings else ""
+            extra += " Supplier claim recorded." if claim else ""
+            st.success(f"Return #{new_id} saved: {item}, {reason.lower()}, {outcome.lower()}.{extra}")
 
 st.info("Demo app: data you add is kept until the app restarts, then the sample data is reloaded.", icon="ℹ️")

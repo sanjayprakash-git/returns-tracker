@@ -1,32 +1,38 @@
-"""Page 3 — manager dashboard (US-06 to US-10)."""
+"""Page 3 — manager dashboard (US-07 to US-12)."""
 import altair as alt
 import streamlit as st
 
 from tracker import analytics, db
+from tracker.policy import CATEGORIES, PART_GRADES, PART_TYPES
 
-BLUE, ORANGE, AQUA = "#2a78d6", "#eb6834", "#1baf7a"
+BLUE, ORANGE, AQUA, YELLOW = "#2a78d6", "#eb6834", "#1baf7a", "#eda100"
+SEQ = ["#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#104281"]  # single-hue blue ramp, light → dark
 
 conn = st.session_state.conn
 returns, sales = db.returns_df(conn), db.sales_df(conn)
 
 st.title("📊 Manager dashboard")
 
-f1, f2, _ = st.columns([1.4, 1.2, 2])
+f1, f2, f3 = st.columns([1.4, 1.6, 1.4])
 lo, hi = sales["sale_date"].min().date(), max(sales["sale_date"].max(), returns["return_date"].max()).date()
 period = f1.date_input("Period", value=(lo, hi), min_value=lo, max_value=hi, format="DD/MM/YYYY")
-series = f2.multiselect("Series", ["A-series", "S-series"], placeholder="All series")
+categories = f2.multiselect("Type", CATEGORIES, placeholder="Repairs, phones and accessories")
+brands = f3.multiselect("Brand", ["Apple", "Samsung", "Google", "OnePlus"], placeholder="All brands")
 if len(period) != 2:
     st.stop()
 
-r, s = analytics.filter_period(returns, sales, period[0], period[1], series)
+r, s = analytics.filter_period(returns, sales, period[0], period[1], categories, brands)
+rep_r, rep_s = r[r["category"] == "Repair"], s[s["category"] == "Repair"]
 
-# KPI row
-k1, k2, k3, k4 = st.columns(4)
-units = int(s["quantity"].sum())
-k1.metric("Returns", f"{len(r):,}")
-k2.metric("Return rate", f"{len(r) / units:.1%}" if units else "–", help="Returns ÷ phones sold in the period")
-k3.metric("Refunded value", f"€{analytics.refunded_value(r):,.0f}", help="Retail price of refunded phones")
-k4.metric("Outside policy", int(r["out_of_policy"].sum()))
+k1, k2, k3, k4, k5 = st.columns(5)
+k1.metric("Returns & comebacks", f"{len(r):,}")
+k2.metric("Repair comeback rate", f"{len(rep_r) / rep_s['quantity'].sum():.1%}" if len(rep_s) else "–",
+          help="Repairs that came back ÷ repair jobs done")
+k3.metric("Cost of returns", f"€{analytics.cost_of_returns(r):,.0f}",
+          help="Free re-repairs (part + labour), refunds, store credit and replacement stock")
+k4.metric("Claimable from suppliers", f"€{analytics.supplier_recoverable(r):,.0f}",
+          help="Cost of faulty parts/products marked for a supplier claim (RMA)")
+k5.metric("Outside policy", int(r["out_of_policy"].sum()))
 
 with st.container(border=True):
     st.markdown("**What the data says**")
@@ -36,66 +42,112 @@ with st.container(border=True):
 if r.empty:
     st.stop()
 
-c1, c2 = st.columns(2)
 
-with c1:
-    st.subheader("Return rate by model")
-    rates = analytics.rate_by_model(r, s)
-    bars = alt.Chart(rates).mark_bar(color=BLUE, cornerRadiusEnd=4, height={"band": 0.7}).encode(
-        x=alt.X("return_rate:Q", title="Return rate", axis=alt.Axis(format="%", grid=True)),
-        y=alt.Y("model:N", sort="-x", title=None),
-        tooltip=[alt.Tooltip("model:N", title="Model"), alt.Tooltip("return_rate:Q", title="Return rate", format=".1%"),
-                 alt.Tooltip("returns:Q", title="Returns"), alt.Tooltip("units_sold:Q", title="Units sold", format=",")],
+def hbar(df, x, y, color=BLUE, fmt=".1%", title=None, height=300, sort="-x", tooltip=None, label=True, label_limit=260):
+    top = float(df[x].max()) * 1.18 if len(df) else 1  # room for the value labels
+    base = alt.Chart(df).encode(
+        x=alt.X(f"{x}:Q", title=title, scale=alt.Scale(domain=[0, top], nice=False),
+                axis=alt.Axis(format="%" if fmt.endswith("%") else "d", tickCount=5, labelFlush=True)),
+        y=alt.Y(f"{y}:N", sort=sort, title=None, axis=alt.Axis(labelLimit=label_limit, labelOverlap=False)),
+        tooltip=tooltip,
     )
-    labels = bars.mark_text(align="left", dx=4).encode(text=alt.Text("return_rate:Q", format=".1%"))
-    avg = alt.Chart().mark_rule(strokeDash=[4, 4], opacity=0.35).encode(x=alt.datum(len(r) / units))
-    st.altair_chart(alt.layer(avg, bars, labels, data=rates).properties(height=340), use_container_width=True)
-    st.caption("Dashed line = shop average. Rates use units sold of the same model, so popular phones aren't penalised.")
+    bars = base.mark_bar(cornerRadiusEnd=4, height={"band": 0.7}, color=color) if isinstance(color, str) else \
+        base.mark_bar(cornerRadiusEnd=4, height={"band": 0.7}).encode(color=color)
+    layers = [bars]
+    if label:
+        layers.append(base.mark_text(align="left", dx=4, color="#52514e").encode(text=alt.Text(f"{x}:Q", format=fmt)))
+    return alt.layer(*layers).properties(height=height, padding={"left": 5, "top": 5, "right": 24, "bottom": 5})
+
+
+rate_tip = lambda name: [alt.Tooltip(f"{name}:N", title=name.capitalize()), alt.Tooltip("rate:Q", title="Rate", format=".1%"),
+                         alt.Tooltip("returns:Q", title="Came back"), alt.Tooltip("units:Q", title="Sold / jobs", format=",")]
+
+c1, c2 = st.columns([1.25, 1])
+with c1:
+    st.subheader("Repair comeback rate by part and grade")
+    m = analytics.part_grade_matrix(r, s)
+    if len(m):
+        base = alt.Chart(m).encode(
+            x=alt.X("part_grade:N", sort=PART_GRADES, title=None,
+                    axis=alt.Axis(labelAngle=0, orient="top", labelExpr="split(datum.label, ' ')[0]")),
+            y=alt.Y("part:N", sort=PART_TYPES, title=None),
+        )
+        heat = base.mark_rect(cornerRadius=4, stroke="white", strokeWidth=2).encode(
+            color=alt.Color("rate:Q", scale=alt.Scale(range=SEQ), legend=alt.Legend(format="%", title="Comeback rate")),
+            tooltip=[alt.Tooltip("part:N", title="Part"), alt.Tooltip("part_grade:N", title="Grade"),
+                     alt.Tooltip("rate:Q", title="Comeback rate", format=".1%"),
+                     alt.Tooltip("returns:Q", title="Came back"), alt.Tooltip("units:Q", title="Jobs", format=",")],
+        )
+        text = base.mark_text(fontSize=13, fontWeight=600).encode(
+            text=alt.Text("rate:Q", format=".1%"),
+            color=alt.condition(alt.datum.rate > 0.06, alt.value("white"), alt.value("#0b0b0b")),
+        )
+        st.altair_chart((heat + text).properties(height=300), use_container_width=True)
+        st.caption("Grades: genuine, premium aftermarket, standard aftermarket. Blank cells: that part isn't offered in that grade.")
+    else:
+        st.info("No repairs in this selection.")
 
 with c2:
-    st.subheader("Why phones come back")
-    rs = analytics.reasons(r)
-    chart = alt.Chart(rs).mark_bar(cornerRadiusEnd=4, height={"band": 0.7}).encode(
-        x=alt.X("returns:Q", title="Returns"),
-        y=alt.Y("reason:N", sort="-x", title=None, axis=alt.Axis(labelLimit=220)),
-        color=alt.Color("type:N", scale=alt.Scale(domain=["Other reason", "Product fault"], range=[BLUE, ORANGE]),
-                        legend=alt.Legend(title=None, orient="bottom")),
-        tooltip=[alt.Tooltip("reason:N", title="Reason"), alt.Tooltip("returns:Q", title="Returns"),
-                 alt.Tooltip("share:Q", title="Share", format=".0%")],
-    )
-    st.altair_chart(chart.properties(height=340), use_container_width=True)
+    st.subheader("Return rate by type")
+    st.altair_chart(hbar(analytics.rate_by(r, s, "category"), "rate", "category", tooltip=rate_tip("category"),
+                         title="Returned ÷ sold"), use_container_width=True)
 
 c3, c4 = st.columns(2)
-
 with c3:
-    st.subheader("Monthly return rate")
-    m = analytics.monthly(r, s)
-    line = alt.Chart(m).mark_line(color=BLUE, strokeWidth=2, point=alt.OverlayMarkDef(size=70, filled=True)).encode(
+    st.subheader("Repairs that come back most")
+    w = analytics.worst_items(r, s)
+    if len(w):
+        st.altair_chart(hbar(w, "rate", "item", color=ORANGE, tooltip=rate_tip("item"), title="Comeback rate"),
+                        use_container_width=True)
+        st.caption(f"Device, part and grade combinations with at least {analytics.MIN_JOBS} jobs.")
+    else:
+        st.info(f"No repair item has {analytics.MIN_JOBS}+ jobs in this selection.")
+
+with c4:
+    st.subheader("Why things come back")
+    rs = analytics.reasons(r)
+    color = alt.Color("responsibility:N", title=None, legend=alt.Legend(orient="bottom", columns=2, labelLimit=160),
+                      scale=alt.Scale(domain=["Part fault", "Workmanship", "Customer damage", "Sale-related"],
+                                      range=[BLUE, ORANGE, AQUA, YELLOW]))
+    st.altair_chart(hbar(rs, "returns", "reason", color=color, fmt="d", title="Returns", label=False, height=420, label_limit=175,
+                         tooltip=[alt.Tooltip("reason:N", title="Reason"), alt.Tooltip("returns:Q", title="Returns"),
+                                  alt.Tooltip("share:Q", title="Share", format=".0%"),
+                                  alt.Tooltip("responsibility:N", title="Responsibility")]),
+                    use_container_width=True)
+
+c5, c6 = st.columns(2)
+with c5:
+    st.subheader("Monthly rate")
+    mo = analytics.monthly(r, s)
+    line = alt.Chart(mo).mark_line(strokeWidth=2, point=alt.OverlayMarkDef(size=70, filled=True)).encode(
         x=alt.X("month:T", title=None, axis=alt.Axis(format="%b", tickCount="month")),
-        y=alt.Y("return_rate:Q", title="Return rate", axis=alt.Axis(format="%"), scale=alt.Scale(zero=True)),
-        tooltip=[alt.Tooltip("month:T", title="Month", format="%B %Y"),
-                 alt.Tooltip("return_rate:Q", title="Return rate", format=".1%"),
-                 alt.Tooltip("returns:Q", title="Returns"), alt.Tooltip("units_sold:Q", title="Units sold", format=",")],
+        y=alt.Y("rate:Q", title="Rate", axis=alt.Axis(format="%"), scale=alt.Scale(zero=True)),
+        color=alt.Color("series:N", title=None, legend=alt.Legend(orient="bottom"),
+                        scale=alt.Scale(domain=["Repair comebacks", "Product returns"], range=[BLUE, ORANGE])),
+        tooltip=[alt.Tooltip("series:N", title="Series"), alt.Tooltip("month:T", title="Month", format="%B %Y"),
+                 alt.Tooltip("rate:Q", title="Rate", format=".1%"), alt.Tooltip("returns:Q", title="Came back"),
+                 alt.Tooltip("units:Q", title="Sold / jobs", format=",")],
     )
     st.altair_chart(line.properties(height=300), use_container_width=True)
 
-with c4:
-    st.subheader("Refund, exchange or repair")
-    o = analytics.outcomes(r)
-    chart = alt.Chart(o).mark_bar(cornerRadiusEnd=4, height={"band": 0.6}).encode(
-        x=alt.X("returns:Q", title="Returns"),
-        y=alt.Y("outcome:N", sort=["Refund", "Exchange", "Repair"], title=None),
-        color=alt.Color("outcome:N", scale=alt.Scale(domain=["Refund", "Exchange", "Repair"], range=[BLUE, ORANGE, AQUA]),
-                        legend=None),
-        tooltip=[alt.Tooltip("outcome:N", title="Outcome"), alt.Tooltip("returns:Q", title="Returns"),
-                 alt.Tooltip("share:Q", title="Share", format=".0%")],
-    )
-    text = chart.mark_text(align="left", dx=4).encode(
-        text=alt.Text("share:Q", format=".0%"), color=alt.value("currentColor"))
-    st.altair_chart(alt.layer(chart, text).properties(height=300), use_container_width=True)
+with c6:
+    st.subheader("Accessory returns by type")
+    acc_r, acc_s = r[r["category"] == "Accessory"], s[s["category"] == "Accessory"]
+    if len(acc_s):
+        st.altair_chart(hbar(analytics.rate_by(acc_r, acc_s, "subcategory"), "rate", "subcategory",
+                             tooltip=rate_tip("subcategory"), title="Returned ÷ sold"), use_container_width=True)
+    else:
+        st.info("No accessories in this selection.")
+
+st.subheader("What happened to each return")
+o = analytics.outcomes(r)
+st.altair_chart(hbar(o, "returns", "outcome", fmt="d", title="Returns", height=200,
+                     sort=["Re-repair (free)", "Refund", "Exchange", "Store credit", "Declined"],
+                     tooltip=[alt.Tooltip("outcome:N", title="Outcome"), alt.Tooltip("returns:Q", title="Returns"),
+                              alt.Tooltip("share:Q", title="Share", format=".0%")]),
+                use_container_width=True)
 
 with st.expander("View the numbers as tables"):
     t1, t2 = st.columns(2)
-    t1.dataframe(rates.style.format({"return_rate": "{:.1%}"}), hide_index=True, width="stretch")
-    t2.dataframe(m.assign(month=m["month"].dt.strftime("%b %Y")).style.format({"return_rate": "{:.1%}"}),
-                 hide_index=True, width="stretch")
+    t1.dataframe(m.style.format({"rate": "{:.1%}"}), hide_index=True, width="stretch")
+    t2.dataframe(analytics.rate_by(r, s, "category").style.format({"rate": "{:.1%}"}), hide_index=True, width="stretch")

@@ -5,62 +5,85 @@ import unittest
 import pandas as pd
 
 from tracker import analytics, db
-from tracker.policy import policy_warnings
+from tracker.policy import policy_warnings, responsibility, suggests_supplier_claim
 from tracker.seed import seed
 
 
 class PolicyTests(unittest.TestCase):
-    def test_change_of_mind_refund_within_14_days_is_allowed(self):
-        self.assertEqual(policy_warnings("Changed mind", "Refund", 14), [])
+    def test_free_re_repair_within_90_days_is_allowed(self):
+        self.assertEqual(policy_warnings("Repair", "Touch not working / ghost touch", "Re-repair (free)", 90), [])
+
+    def test_free_re_repair_after_90_days_is_flagged(self):
+        self.assertEqual(len(policy_warnings("Repair", "Touch not working / ghost touch", "Re-repair (free)", 91)), 1)
+
+    def test_customer_damage_is_only_ok_when_declined(self):
+        self.assertEqual(policy_warnings("Repair", "Customer damage after repair", "Declined", 5), [])
+        self.assertEqual(len(policy_warnings("Repair", "Customer damage after repair", "Re-repair (free)", 5)), 1)
 
     def test_change_of_mind_refund_after_14_days_is_flagged(self):
-        self.assertEqual(len(policy_warnings("Changed mind", "Refund", 15)), 1)
+        self.assertEqual(policy_warnings("Accessory", "Changed mind", "Refund", 14), [])
+        self.assertEqual(len(policy_warnings("Accessory", "Changed mind", "Refund", 15)), 1)
+        self.assertEqual(policy_warnings("Accessory", "Changed mind", "Store credit", 30), [])
 
-    def test_change_of_mind_exchange_after_14_days_is_allowed(self):
-        self.assertEqual(policy_warnings("Changed mind", "Exchange", 40), [])
+    def test_faulty_new_phone_refund_after_30_days_is_flagged(self):
+        self.assertEqual(len(policy_warnings("New phone", "Faulty", "Refund", 31)), 1)
 
-    def test_fault_refund_after_30_days_is_flagged(self):
-        self.assertEqual(policy_warnings("Faulty – screen", "Refund", 30), [])
-        self.assertEqual(len(policy_warnings("Faulty – screen", "Refund", 31)), 1)
+    def test_supplier_claim_suggested_for_part_faults_only(self):
+        self.assertTrue(suggests_supplier_claim("Repair", "Part dead on arrival"))
+        self.assertFalse(suggests_supplier_claim("Repair", "Fitting issue (workmanship)"))
+        self.assertFalse(suggests_supplier_claim("Accessory", "Changed mind"))
 
-    def test_accidental_damage_only_allows_repair(self):
-        self.assertEqual(policy_warnings("Accidental damage", "Repair", 5), [])
-        self.assertEqual(len(policy_warnings("Accidental damage", "Exchange", 5)), 1)
+    def test_responsibility(self):
+        self.assertEqual(responsibility("Fitting issue (workmanship)"), "Workmanship")
+        self.assertEqual(responsibility("Lines or dead pixels on display"), "Part fault")
+        self.assertEqual(responsibility("Changed mind"), "Sale-related")
 
 
 class AnalyticsTests(unittest.TestCase):
     def setUp(self):
         self.returns = pd.DataFrame({
             "return_date": pd.to_datetime(["2026-05-02", "2026-05-10", "2026-06-01"]),
-            "model": ["A", "A", "B"], "series": ["A-series"] * 3, "price": [100.0, 100.0, 900.0],
-            "reason": ["Changed mind", "Faulty – battery", "Changed mind"],
-            "outcome": ["Refund", "Repair", "Refund"], "out_of_policy": [False, False, True],
+            "category": ["Repair", "Repair", "Accessory"], "brand": ["Apple", "Apple", "Universal"],
+            "name": ["Screen", "Screen", "USB-C cable"], "part_grade": ["Standard aftermarket", "Genuine", None],
+            "item": ["iPhone 13 · Screen · Standard aftermarket", "iPhone 13 · Screen · Genuine", "USB-C cable"],
+            "supplier": ["Supplier C", "Supplier A", "Supplier D"],
+            "reason": ["Touch not working / ghost touch", "Fitting issue (workmanship)", "Faulty"],
+            "outcome": ["Re-repair (free)", "Re-repair (free)", "Exchange"],
+            "price": [109.0, 279.0, 12.0], "cost": [30.0, 125.0, 2.5],
+            "supplier_claim": [True, False, True], "out_of_policy": [False, False, False],
         })
+        self.returns["return_cost"] = db.return_cost(self.returns)
         self.sales = pd.DataFrame({
-            "sale_date": pd.to_datetime(["2026-05-01", "2026-05-01", "2026-06-01"]),
-            "model": ["A", "B", "B"], "series": ["A-series"] * 3, "price": [100.0, 900.0, 900.0],
-            "quantity": [10, 20, 30],
+            "sale_date": pd.to_datetime(["2026-05-01"] * 3),
+            "category": ["Repair", "Repair", "Accessory"], "brand": ["Apple", "Apple", "Universal"],
+            "name": ["Screen", "Screen", "USB-C cable"], "part_grade": ["Standard aftermarket", "Genuine", None],
+            "item": ["iPhone 13 · Screen · Standard aftermarket", "iPhone 13 · Screen · Genuine", "USB-C cable"],
+            "quantity": [10, 40, 100],
         })
 
-    def test_return_rate_uses_units_sold_per_model(self):
-        rates = analytics.rate_by_model(self.returns, self.sales).set_index("model")
-        self.assertAlmostEqual(rates.loc["A", "return_rate"], 2 / 10)
-        self.assertAlmostEqual(rates.loc["B", "return_rate"], 1 / 50)
+    def test_comeback_rate_by_part_and_grade(self):
+        m = analytics.part_grade_matrix(self.returns, self.sales).set_index("part_grade")
+        self.assertAlmostEqual(m.loc["Standard aftermarket", "rate"], 1 / 10)
+        self.assertAlmostEqual(m.loc["Genuine", "rate"], 1 / 40)
 
-    def test_refunded_value_counts_refunds_only(self):
-        self.assertEqual(analytics.refunded_value(self.returns), 1000.0)
+    def test_cost_of_returns(self):
+        # re-repairs: part cost + €15 labour each; exchange: replacement cost
+        self.assertAlmostEqual(analytics.cost_of_returns(self.returns), (30 + 15) + (125 + 15) + 2.5)
 
-    def test_insights_name_highest_rate_model(self):
-        self.assertIn("**A**", analytics.insights(self.returns, self.sales)[0])
+    def test_supplier_recoverable_counts_claims_only(self):
+        self.assertAlmostEqual(analytics.supplier_recoverable(self.returns), 30 + 2.5)
 
 
 class SeedTests(unittest.TestCase):
-    def test_seed_produces_about_300_returns_with_no_negative_days(self):
+    def test_seed_is_mostly_repair_comebacks(self):
         conn = sqlite3.connect(":memory:")
         db.init_db(conn)
         seed(conn)
-        n, bad = conn.execute("SELECT COUNT(*), SUM(days_since_purchase < 0) FROM returns").fetchone()
-        self.assertTrue(250 <= n <= 350, n)
+        total, repairs, bad = conn.execute(
+            """SELECT COUNT(*), SUM(i.category = 'Repair'), SUM(r.days_since_purchase < 0)
+               FROM returns r JOIN items i ON i.id = r.item_id""").fetchone()
+        self.assertTrue(220 <= total <= 340, total)
+        self.assertGreater(repairs / total, 0.6)
         self.assertEqual(bad, 0)
 
 

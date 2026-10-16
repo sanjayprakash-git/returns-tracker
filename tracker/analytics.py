@@ -1,102 +1,140 @@
-"""Metrics and plain-English insights for the manager dashboard (US-06 to US-10)."""
+"""Metrics and plain-English insights for the manager dashboard."""
 import pandas as pd
 
-from tracker.policy import FAULT_REASONS
+from tracker.policy import responsibility
+
+MIN_JOBS = 30  # ignore items with too few jobs to judge a rate
 
 
-def filter_period(returns: pd.DataFrame, sales: pd.DataFrame, start, end, series=None):
+def filter_period(returns, sales, start, end, categories=None, brands=None):
     start, end = pd.Timestamp(start), pd.Timestamp(end)
     r = returns[(returns["return_date"] >= start) & (returns["return_date"] <= end)]
     s = sales[(sales["sale_date"] >= start) & (sales["sale_date"] <= end)]
-    if series:
-        r, s = r[r["series"].isin(series)], s[s["series"].isin(series)]
+    if categories:
+        r, s = r[r["category"].isin(categories)], s[s["category"].isin(categories)]
+    if brands:
+        r, s = r[r["brand"].isin(brands)], s[s["brand"].isin(brands)]
     return r, s
 
 
-def rate_by_model(returns: pd.DataFrame, sales: pd.DataFrame) -> pd.DataFrame:
-    units = sales.groupby("model")["quantity"].sum().rename("units_sold")
-    count = returns.groupby("model").size().rename("returns")
-    df = pd.concat([units, count], axis=1).fillna(0).astype(int)
-    df = df[df["units_sold"] > 0]
-    df["return_rate"] = df["returns"] / df["units_sold"]
-    return df.sort_values("return_rate", ascending=False).reset_index(names="model")
+def rate_by(returns, sales, keys) -> pd.DataFrame:
+    """Returns ÷ units sold, grouped by one or more columns."""
+    keys = [keys] if isinstance(keys, str) else keys
+    units = sales.groupby(keys)["quantity"].sum().rename("units")
+    count = returns.groupby(keys).size().rename("returns")
+    df = pd.concat([units, count], axis=1).fillna(0)
+    df = df[df["units"] > 0].astype({"units": int, "returns": int})
+    df["rate"] = df["returns"] / df["units"]
+    return df.reset_index().sort_values("rate", ascending=False)
 
 
-def reasons(returns: pd.DataFrame) -> pd.DataFrame:
+def part_grade_matrix(returns, sales) -> pd.DataFrame:
+    rr, ss = returns[returns["category"] == "Repair"], sales[sales["category"] == "Repair"]
+    return rate_by(rr, ss, ["name", "part_grade"]).rename(columns={"name": "part"})
+
+
+def worst_items(returns, sales, n=8) -> pd.DataFrame:
+    rr, ss = returns[returns["category"] == "Repair"], sales[sales["category"] == "Repair"]
+    df = rate_by(rr, ss, "item")
+    return df[df["units"] >= MIN_JOBS].head(n)
+
+
+def reasons(returns) -> pd.DataFrame:
     df = returns.groupby("reason").size().rename("returns").reset_index()
     df["share"] = df["returns"] / df["returns"].sum() if len(df) else 0
-    df["type"] = df["reason"].map(lambda r: "Product fault" if r in FAULT_REASONS else "Other reason")
+    df["responsibility"] = df["reason"].map(responsibility)
     return df.sort_values("returns", ascending=False)
 
 
-def monthly(returns: pd.DataFrame, sales: pd.DataFrame) -> pd.DataFrame:
-    r = returns.groupby(returns["return_date"].dt.to_period("M")).size().rename("returns")
-    s = sales.groupby(sales["sale_date"].dt.to_period("M"))["quantity"].sum().rename("units_sold")
-    df = pd.concat([r, s], axis=1).fillna(0)
-    df = df[df["units_sold"] > 0]
-    df["return_rate"] = df["returns"] / df["units_sold"]
-    df.index = df.index.to_timestamp()
-    return df.reset_index(names="month")
+def monthly(returns, sales) -> pd.DataFrame:
+    """Monthly rate for repairs (comebacks) and products (returns), in long format for one chart."""
+    def group(df_r, df_s):
+        r = df_r.groupby(df_r["return_date"].dt.to_period("M")).size()
+        s = df_s.groupby(df_s["sale_date"].dt.to_period("M"))["quantity"].sum()
+        out = pd.concat([r.rename("returns"), s.rename("units")], axis=1).fillna(0)
+        out = out[out["units"] > 0]
+        out["rate"] = out["returns"] / out["units"]
+        out.index = out.index.to_timestamp()
+        return out.reset_index(names="month")
+    is_rep_r, is_rep_s = returns["category"] == "Repair", sales["category"] == "Repair"
+    parts = []
+    for label, r, s in (("Repair comebacks", returns[is_rep_r], sales[is_rep_s]),
+                        ("Product returns", returns[~is_rep_r], sales[~is_rep_s])):
+        if len(s):
+            parts.append(group(r, s).assign(series=label))
+    return pd.concat(parts) if parts else pd.DataFrame(columns=["month", "returns", "units", "rate", "series"])
 
 
-def outcomes(returns: pd.DataFrame) -> pd.DataFrame:
+def outcomes(returns) -> pd.DataFrame:
     df = returns.groupby("outcome").size().rename("returns").reset_index()
     df["share"] = df["returns"] / df["returns"].sum() if len(df) else 0
-    return df.sort_values("returns", ascending=False)
+    return df
 
 
-def refunded_value(returns: pd.DataFrame) -> float:
-    return float(returns.loc[returns["outcome"] == "Refund", "price"].sum())
+def cost_of_returns(returns) -> float:
+    return float(returns["return_cost"].sum())
 
 
-def insights(returns: pd.DataFrame, sales: pd.DataFrame) -> list[str]:
-    """Three to four headline sentences that update with the filters."""
+def supplier_recoverable(returns) -> float:
+    """Part / product cost the shop can claim back from suppliers (RMA)."""
+    return float(returns.loc[returns["supplier_claim"], "cost"].sum())
+
+
+def insights(returns, sales) -> list[str]:
     if returns.empty or sales.empty:
         return ["No returns in the selected period."]
     out = []
+    rep_r, rep_s = returns[returns["category"] == "Repair"], sales[sales["category"] == "Repair"]
 
-    rates = rate_by_model(returns, sales)
-    overall = len(returns) / sales["quantity"].sum()
-    top = rates.iloc[0]
-    out.append(
-        f"**{top['model']}** has the highest return rate at **{top['return_rate']:.1%}** "
-        f"({top['returns']} of {top['units_sold']:,} sold), {top['return_rate'] / overall:.1f}× the shop average of {overall:.1%}."
-    )
-
-    rs = reasons(returns)
-    lead = rs.iloc[0]
-    fault_share = rs.loc[rs["type"] == "Product fault", "returns"].sum() / len(returns)
-    out.append(
-        f"**{lead['reason']}** is the top reason ({lead['share']:.0%} of returns). "
-        f"Product faults account for {fault_share:.0%}, so most returns are about the sale, not the phone."
-        if fault_share < 0.5 else
-        f"**{lead['reason']}** is the top reason ({lead['share']:.0%} of returns), and product faults account for {fault_share:.0%}."
-    )
-
-    m = monthly(returns, sales)
-    if len(m) >= 2:
-        last, prev = m.iloc[-1], m.iloc[-2]
-        change = last["return_rate"] - prev["return_rate"]
-        direction = "up" if change > 0 else "down"
+    # 1. Screen grade comparison — the biggest lever in a repair shop
+    m = part_grade_matrix(returns, sales).set_index(["part", "part_grade"])
+    try:
+        std, gen = m.loc[("Screen", "Standard aftermarket")], m.loc[("Screen", "Genuine")]
+        prem = m.loc[("Screen", "Premium aftermarket")]
+        avoidable = round((std["rate"] - prem["rate"]) * std["units"])
         out.append(
-            f"In **{last['month']:%B}** the return rate was **{last['return_rate']:.1%}**, "
-            f"{direction} {abs(change) * 100:.1f} points from {prev['month']:%B}."
+            f"**Standard aftermarket screens** come back **{std['rate']:.1%}** of the time vs "
+            f"{prem['rate']:.1%} for premium and {gen['rate']:.1%} for genuine. Fitting premium instead "
+            f"would have avoided about **{avoidable} comebacks**."
         )
+    except KeyError:
+        pass
 
-    # Biggest single-model fault spike in any month
-    faults = returns[returns["reason"].isin(FAULT_REASONS)]
-    if not faults.empty:
-        by = faults.groupby([faults["return_date"].dt.to_period("M"), "model", "reason"]).size()
-        (month, model, reason), n = by.idxmax(), by.max()
-        months = returns["return_date"].dt.to_period("M").unique()
-        typical = by.xs((model, reason), level=(1, 2)).reindex(months, fill_value=0).median()
-        if n >= 5 and n >= 3 * max(typical, 1):
-            out.append(
-                f"⚠️ **{model}** had a spike of **{n} '{reason.split('– ')[-1]}' faults in {month.strftime('%B')}**. "
-                f"Worth checking that stock batch with the supplier."
-            )
+    # 2. Worst repair item with enough volume
+    worst = worst_items(returns, sales, n=1)
+    if len(worst) and len(rep_s):
+        avg = len(rep_r) / rep_s["quantity"].sum()
+        w = worst.iloc[0]
+        out.append(f"Worst repair: **{w['item']}** at **{w['rate']:.0%}** comeback rate "
+                   f"({w['returns']} of {w['units']} jobs), vs {avg:.1%} across all repairs.")
+
+    # 3. Supplier / part spike in a single month
+    if len(rep_r):
+        grid = (rep_r.groupby([rep_r["return_date"].dt.to_period("M"), "supplier", "name"]).size()
+                .unstack(["supplier", "name"], fill_value=0))
+        best = None
+        for (supplier, part), counts in grid.items():
+            n, typical = counts.max(), counts.median()
+            ratio = n / max(typical, 1)
+            if n >= 8 and ratio >= 2.5 and (best is None or ratio > best[0]):
+                best = (ratio, supplier, part, counts.idxmax(), n, typical)
+        if best:
+            _, supplier, part, month, n, typical = best
+            out.append(f"⚠️ **{part} repairs with {supplier} parts**: {n} comebacks in {month.strftime('%B')} "
+                       f"vs a typical {typical:.0f} a month. Likely a bad batch, so raise it with the supplier.")
+
+    # 4. Money to claim back
+    recoverable, claims = supplier_recoverable(returns), int(returns["supplier_claim"].sum())
+    if claims:
+        out.append(f"**€{recoverable:,.0f}** in faulty parts and products ({claims} items) can be claimed back from suppliers.")
+
+    # 5. Workmanship
+    work = int((rep_r["reason"].map(responsibility) == "Workmanship").sum())
+    if work:
+        out.append(f"**{work}** comebacks ({work / max(len(rep_r), 1):.0%} of repair comebacks) were fitting issues: "
+                   "a technician training opportunity rather than a parts problem.")
 
     flagged = int(returns["out_of_policy"].sum())
     if flagged:
-        out.append(f"**{flagged}** returns were handled outside the returns policy.")
+        out.append(f"**{flagged}** returns were handled outside policy.")
     return out

@@ -1,46 +1,58 @@
 # Returns Tracker
 
-A returns tracking and analysis app for a phone shop selling Samsung Galaxy A-series and S-series phones. Staff log each return in about 30 seconds, and the manager gets a dashboard showing which models come back, why, and whether it's getting better or worse.
+A comeback and returns tracker for a phone repair & accessories shop. Technicians and sales staff log anything that comes back in about 30 seconds: a repair comeback, a new or reconditioned phone, or an accessory. The manager gets a dashboard showing which parts, grades and suppliers fail, what returns cost, and how much can be claimed back from suppliers.
 
 **Live demo:** _link coming after deployment_ · **Requirements:** [docs/requirements.md](docs/requirements.md)
 
-![Manager dashboard](screenshots/dashboard.png)
+![Manager dashboard](screenshots/dashboard-top.png)
 
 ---
 
 ## The problem
 
-In a typical phone shop, returns are recorded inconsistently: a note in the POS, a paper slip, or nothing at all when a phone is swapped on the spot. So the manager can't answer simple questions. Which model has the most returns? Is it faults or buyer's remorse? Are we refunding outside policy? Without return *rates* (returns ÷ units sold), popular models also look worse than they are.
+In a repair shop, most of what comes back is repair comebacks: a replacement screen with ghost touch or lines, a battery that drains fast, a sensor flex that stops Face ID or the fingerprint reader working. These usually get re-done at the counter with nothing recorded, so the shop can't answer:
+
+- Are cheaper aftermarket screens a false economy?
+- Which supplier's parts are failing, and is it a bad batch?
+- How much credit are we losing by binning faulty parts instead of claiming them?
+- Is it the part, or the fitting?
 
 ## How I approached it
 
-1. **Requirements first.** I wrote the [requirements document](docs/requirements.md): problem statement, stakeholders, 10 user stories with acceptance criteria, business rules, the data model, and the current vs future returns process as diagrams.
-2. **Data model.** Four tables (products, staff, sales, returns), so return rates can be calculated against sales and every return is linked to a model and a staff member.
+1. **Requirements first.** I wrote the [requirements document](docs/requirements.md): problem statement, stakeholders, 12 user stories with acceptance criteria, business rules (warranty and returns policy), the data model, and current vs future process diagrams.
+2. **Data model.** One `items` table covers repair jobs (device, part, grade, supplier), phones and accessories, so comeback and return rates use one formula: returns ÷ jobs or units sold.
 3. **Build.** A Streamlit app on SQLite with three pages: log a return, a filterable returns log, and a manager dashboard.
-4. **Policy built into the form.** The form calculates days since purchase and warns at the counter when a refund would break policy, for example a change-of-mind refund after 14 days.
+4. **Rules built into the form.** Reasons and outcomes adapt to what's coming back. The form calculates days since repair or purchase, warns about out-of-policy decisions (such as a free re-repair after the 90-day warranty), and suggests a supplier claim when a part is faulty.
 
 ## What it does
 
 | Page | For | Features |
 |---|---|---|
-| **Log a return** | Shop staff | Dropdowns for model, reason and condition; automatic days-since-purchase; live policy warnings; validation |
-| **Returns log** | Manager | Filter by date, model, reason, outcome and staff; show only out-of-policy returns; CSV export |
-| **Manager dashboard** | Manager | Return rate by model, top reasons (faults vs. other), monthly trend, refund/exchange/repair split, refunded value, and automatically written insights |
+| **Log a return** | Technicians & sales staff | Type → brand or accessory group → exact item (e.g. *iPhone 13 · Screen · Standard aftermarket*); reason and outcome lists that fit the type; automatic days and responsibility; policy warnings; supplier claim suggestion |
+| **Returns log** | Manager | Filter by date, type, brand, reason and outcome; show only out-of-policy cases or supplier claims; running cost; CSV export |
+| **Manager dashboard** | Manager | Comeback rate by part × grade, return rate by type, worst repairs, reasons by responsibility (part fault, workmanship, customer damage, sale-related), monthly trend, accessory returns by group, outcomes, cost of returns, claimable value, and automatically written insights |
 
-| Log a return, with a policy warning | Returns log |
+| Log a return: warranty warning and supplier claim | Returns log |
 |---|---|
 | ![Log a return](screenshots/log-return.png) | ![Returns log](screenshots/returns-log.png) |
 
+<details>
+<summary>Full dashboard</summary>
+
+![Full dashboard](screenshots/dashboard.png)
+
+</details>
+
 ## What the demo data shows
 
-The demo uses generated data (6 months, about 5,300 phones sold and about 300 returns), built with realistic patterns for the dashboard to find:
+The demo uses generated data: 6 months, about 7,100 repair jobs and sales, and about 280 returns (70% repair comebacks), with patterns for the dashboard to find:
 
-- **The budget Galaxy A06 is returned twice as often as average** (11.0% vs 5.6%), mostly for change of mind and "not as described". That points to how it's sold rather than to faults.
-- **Product faults are only about a quarter of returns.** Most returns are about the sale (expectations, wrong model), which staff training can address.
-- **The Galaxy A17 had a battery-fault spike in June and July.** The dashboard flags it automatically as a batch to raise with the supplier.
-- **6 returns were refunded outside policy.** The new form warns staff before this happens.
+- **Standard aftermarket screens come back 12.8% of the time**, vs 4.9% for premium and 2.7% for genuine. Fitting premium instead would have avoided about 40 comebacks.
+- **A bad battery batch from one supplier** shows up as 15 comebacks in June against a typical 5 a month. The dashboard flags it automatically.
+- **About €8,800 of faulty parts and products can be claimed back** from suppliers once they're recorded instead of binned.
+- **14% of repair comebacks are fitting issues**, which points to technician training rather than parts.
 
-No real customer or shop data is used.
+No real customer, supplier or shop data is used.
 
 ## Run it locally
 
@@ -52,18 +64,16 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-The database is created and filled with demo data on first start. To regenerate it, delete `data/returns.db`.
-
-Run the tests with `python -m unittest`.
+The database is created and filled with demo data on first start. To regenerate it, delete `data/returns.db`. Run the tests with `python -m unittest`.
 
 ## Project structure
 
 ```
 app.py                 Entry point and page navigation
 pages/                 Log a return, returns log, manager dashboard
-tracker/db.py          SQLite schema and queries
-tracker/policy.py      Reference values and returns-policy rules
-tracker/analytics.py   Return rates, trends and generated insights
+tracker/db.py          SQLite schema, queries and cost-of-return rules
+tracker/policy.py      Reference values, warranty/returns policy, responsibility
+tracker/analytics.py   Comeback rates, spike detection and generated insights
 tracker/seed.py        Demo data generator
 tests/                 Tests for policy rules and dashboard maths
 docs/requirements.md   Requirements, user stories, data model, process diagrams
@@ -73,10 +83,10 @@ docs/requirements.md   Requirements, user stories, data model, process diagrams
 
 ## What I'd do next
 
-- Connect to the POS so sales and returns don't need entering twice
-- Add logins so staff see the form and managers see the dashboard
-- Track repairs through to completion and calculate supplier claim value
-- Move to a hosted database so data persists across restarts
+- Connect to the repair-ticket and POS system so jobs and sales don't need entering twice
+- Track supplier claims through to credit received
+- Record the technician on each job to compare comeback rates fairly
+- Add logins and move to a hosted database so data persists and several branches can share it
 
 ---
 
