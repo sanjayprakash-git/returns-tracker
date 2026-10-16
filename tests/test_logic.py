@@ -128,7 +128,7 @@ class AuthTests(unittest.TestCase):
         seed(conn)
         for username, password, role in DEMO_LOGINS:
             self.assertEqual(authenticate(conn, username, password)["role"], role.lower())
-        self.assertIsNone(authenticate(conn, "mei", "wrong-password"))
+        self.assertIsNone(authenticate(conn, "sanjay", "wrong-password"))
 
 
 class SeedTests(unittest.TestCase):

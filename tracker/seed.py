@@ -5,7 +5,7 @@ Returns: ~300, mostly repair comebacks on fitted parts.
 
 Built-in patterns (so the dashboard has something to find):
 - Standard aftermarket screens come back ~5x more often than genuine screens.
-- Supplier C's aftermarket batteries had a bad batch (jobs from late May to early July).
+- Corrib Budget Parts' aftermarket batteries had a bad batch (jobs from late May to early July).
 - Google Pixel screen repairs often come back with fingerprint-sensor problems.
 - Sensor flex repairs (Face ID / proximity) are the trickiest part to get right.
 - Cheap wireless earbuds and fast chargers are the accessories most often returned faulty.
@@ -35,7 +35,8 @@ DEVICES = {
     "OnePlus 9": ("OnePlus", 189, 65, 55), "OnePlus 10 Pro": ("OnePlus", 229, 69, 59),
     "OnePlus Nord 3": ("OnePlus", 139, 55, 49),
 }
-GRADE_SUPPLIER = {"Genuine": "Supplier A", "Premium aftermarket": "Supplier B", "Standard aftermarket": "Supplier C"}
+GRADE_SUPPLIER = {"Genuine": "Harbourline Parts", "Premium aftermarket": "Liffeyside Spares",
+                  "Standard aftermarket": "Corrib Budget Parts"}  # fictional supplier names
 GRADE_PRICE = {"Genuine": 1.0, "Premium aftermarket": 0.6, "Standard aftermarket": 0.42}
 GRADE_COST = {"Genuine": 0.45, "Premium aftermarket": 0.35, "Standard aftermarket": 0.28}
 
@@ -70,8 +71,8 @@ ACCESSORIES = [  # subcategory, name, price, cost, sales weight, return rate, wa
     ("Storage & memory", "MicroSD card 128GB", 22, 8, 3, 0.010, 90),
     ("Storage & memory", "USB flash drive 64GB", 15, 5, 2, 0.008, 90),
 ]
-STAFF = [("Ciarán B.", "technician", "ciaran"), ("Priya S.", "technician", "priya"), ("Aoife M.", "sales", "aoife"),
-         ("Tomás K.", "sales", "tomas"), ("Mei L.", "manager", "mei")]
+STAFF = [("Sanjay", "manager", "sanjay"), ("Karolina", "technician", "karolina"),
+         ("William", "technician", "william"), ("Kariana", "sales", "kariana")]
 
 BRAND_SHARE = {"Apple": 45, "Samsung": 30, "Google": 12, "OnePlus": 13}
 PART_SHARE = {"Screen": 50, "Battery": 25, "Charging port flex": 10, "Sensor flex": 5, "Back glass": 6, "Camera": 4}
@@ -134,27 +135,27 @@ def _catalogue():
             price = battery if grade == "Genuine" else round(battery * 0.75)
             rows.append(("Repair", None, brand, device, "Battery", grade, GRADE_SUPPLIER[grade], 90, price,
                          round(price * GRADE_COST[grade], 2)))
-        rows.append(("Repair", None, brand, device, "Charging port flex", "Premium aftermarket", "Supplier B", 90,
+        rows.append(("Repair", None, brand, device, "Charging port flex", "Premium aftermarket", "Liffeyside Spares", 90,
                      small, round(small * 0.3, 2)))
-        rows.append(("Repair", None, brand, device, "Sensor flex", "Premium aftermarket", "Supplier B", 90,
+        rows.append(("Repair", None, brand, device, "Sensor flex", "Premium aftermarket", "Liffeyside Spares", 90,
                      small + 30, round((small + 30) * 0.35, 2)))
         if brand != "OnePlus":
-            rows.append(("Repair", None, brand, device, "Back glass", "Standard aftermarket", "Supplier C", 90,
+            rows.append(("Repair", None, brand, device, "Back glass", "Standard aftermarket", "Corrib Budget Parts", 90,
                          small + 20, round((small + 20) * 0.25, 2)))
-        rows.append(("Repair", None, brand, device, "Camera", "Genuine", "Supplier A", 90,
+        rows.append(("Repair", None, brand, device, "Camera", "Genuine", "Harbourline Parts", 90,
                      small + 40, round((small + 40) * 0.45, 2)))
     for brand, device, price, cost in NEW_PHONES:
-        rows.append(("New phone", None, brand, device, "Brand new", None, "Distributor", 30, price, cost))
+        rows.append(("New phone", None, brand, device, "Brand new", None, "Celtic Handset Distribution", 30, price, cost))
     for brand, device, grade, price, cost in RECON_PHONES:
-        rows.append(("Reconditioned phone", None, brand, device, grade, None, "Refurb partner", 180, price, cost))
+        rows.append(("Reconditioned phone", None, brand, device, grade, None, "Renew Mobile Refurb", 180, price, cost))
     for sub, name, price, cost, _, _, warranty in ACCESSORIES:
-        rows.append(("Accessory", sub, "Universal", None, name, None, "Supplier D", warranty, price, cost))
+        rows.append(("Accessory", sub, "Universal", None, name, None, "Emerald Isle Accessories", warranty, price, cost))
     return rows
 
 
 def _repair_return(rng, brand, part, grade, supplier, day):
     rate = COMEBACK[(part, grade)]
-    in_batch = part == "Battery" and supplier == "Supplier C" and BAD_BATTERY_BATCH[0] <= day <= BAD_BATTERY_BATCH[1]
+    in_batch = part == "Battery" and supplier == "Corrib Budget Parts" and BAD_BATTERY_BATCH[0] <= day <= BAD_BATTERY_BATCH[1]
     if in_batch:
         rate *= 3.5
     if brand == "Google" and part == "Screen":
@@ -208,11 +209,11 @@ def _product_return(rng, category, subcategory, rate, warranty=None):
 
 # How each supplier handles claims: days to respond, acceptance rate, what they give back when accepted
 SUPPLIER_TERMS = {
-    "Supplier A": ((7, 14), 0.95, {"Credit note": 70, "Replacement stock": 30}),
-    "Supplier B": ((10, 20), 0.88, {"Replacement stock": 60, "Credit note": 40}),
-    "Supplier C": ((15, 40), 0.70, {"Replacement stock": 50, "Credit note": 50}),
-    "Supplier D": ((5, 12), 0.90, {"Replacement stock": 70, "Credit note": 30}),
-    "Refurb partner": ((10, 20), 0.85, {"Refund": 50, "Replacement stock": 50}),
+    "Harbourline Parts": ((7, 14), 0.95, {"Credit note": 70, "Replacement stock": 30}),
+    "Liffeyside Spares": ((10, 20), 0.88, {"Replacement stock": 60, "Credit note": 40}),
+    "Corrib Budget Parts": ((15, 40), 0.70, {"Replacement stock": 50, "Credit note": 50}),
+    "Emerald Isle Accessories": ((5, 12), 0.90, {"Replacement stock": 70, "Credit note": 30}),
+    "Renew Mobile Refurb": ((10, 20), 0.85, {"Refund": 50, "Replacement stock": 50}),
 }
 
 
@@ -221,7 +222,7 @@ def _claim_lifecycle(rng, supplier, created, quantity, cost, repair_part, quick=
     sent = created + timedelta(days=rng.randint(0, 3) if quick else rng.randint(2, 10))  # sent in weekly batches
     if sent > END:
         return ("In faulty stock", None, None, None, None, None, None)
-    rma = f"RMA-{supplier[-1] if supplier.startswith('Supplier') else 'R'}{rng.randint(1000, 9999)}"
+    rma = f"RMA-{''.join(w[0] for w in supplier.split()[:2])}{rng.randint(1000, 9999)}"
     (lo, hi), accept_rate, accepted = SUPPLIER_TERMS[supplier]
     resolved = sent + timedelta(days=rng.randint(lo, hi))
     if resolved > END:
@@ -232,7 +233,7 @@ def _claim_lifecycle(rng, supplier, created, quantity, cost, repair_part, quick=
         resolution = _pick(rng, {"Rejected - written off": 50,
                                  "Rejected - used for parts" if repair_part else "Rejected - repaired & resold": 50})
     replacement = quantity if resolution == "Replacement stock" else None
-    credit = round(cost * quantity * (0.8 if supplier == "Supplier C" else 1.0), 2) \
+    credit = round(cost * quantity * (0.8 if supplier == "Corrib Budget Parts" else 1.0), 2) \
         if resolution in ("Credit note", "Refund") else None
     return ("Closed", sent, rma, resolution, replacement, credit, resolved)
 

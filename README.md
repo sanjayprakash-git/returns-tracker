@@ -4,7 +4,7 @@ A comeback, returns and supplier-claims tracker for a phone repair & accessories
 
 **Live demo:** _link coming after deployment_ · **Requirements:** [docs/requirements.md](docs/requirements.md)
 
-**Demo logins:** manager `mei` / `manager-demo` · technician `ciaran` / `tech-demo` · sales `aoife` / `sales-demo`
+**Try it:** the sign-in page has one-click **Try as Manager / Technician / Sales** buttons. All demo data, staff and supplier names are fictional.
 
 ![Manager dashboard](screenshots/dashboard-top.png)
 
@@ -52,15 +52,15 @@ In a repair shop, most of what comes back is repair comebacks: a replacement scr
 
 ## What the demo data shows
 
-The demo uses generated data: 6 months, about 7,100 repair jobs and sales, and about 280 returns (70% repair comebacks), with patterns for the dashboard to find:
+The demo uses generated data: 6 months, about 7,500 repair jobs and sales, and about 310 returns (73% repair comebacks), with patterns for the dashboard to find:
 
-- **Standard aftermarket screens come back 12.8% of the time**, vs 4.9% for premium and 2.7% for genuine. Fitting premium instead would have avoided about 40 comebacks.
-- **A bad battery batch from one supplier** shows up as 15 comebacks in June against a typical 5 a month. The dashboard flags it automatically.
-- **About €8,800 of faulty parts and products can be claimed back** from suppliers once they're recorded instead of binned.
-- **14% of repair comebacks are fitting issues**, which points to technician training rather than parts.
-- **Supplier C takes 27 days to settle a claim and accepts 83%**, vs 9 days for Supplier D. **85 units arrived damaged** across 18 deliveries.
+- **Standard aftermarket screens come back 13.9% of the time**, vs 6.2% for premium and 2.4% for genuine. Fitting premium instead would have avoided about 40 comebacks.
+- **A bad battery batch from one supplier** shows up as 14 comebacks in June against a typical 6 a month. The dashboard flags it automatically.
+- **About €9,100 was recovered from suppliers** (replacement stock, credit notes and refunds) once faulty units were tracked instead of binned.
+- **12% of repair comebacks are fitting issues**, which points to technician training rather than parts.
+- **The budget parts supplier takes 28 days to settle a claim and accepts 70%**, vs 9 days for the accessories supplier. **61 units arrived damaged** across 18 deliveries.
 
-No real customer, supplier or shop data is used.
+No real customer, supplier or shop data is used; supplier and staff names are fictional.
 
 ## Run it locally
 

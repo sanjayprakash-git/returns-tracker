@@ -307,4 +307,4 @@ flowchart LR
 
 ## 9. Demo data
 
-The live demo uses generated data only: 6 months of repair jobs, new and reconditioned phone sales and accessory sales (about 7,100 in total), and about 280 returns, mostly repair comebacks, with realistic patterns by part, grade and supplier. No real customer, supplier or shop data is used.
+The live demo uses generated data only: 6 months of repair jobs, new and reconditioned phone sales and accessory sales (about 7,500 in total), and about 310 returns, mostly repair comebacks, with realistic patterns by part, grade and supplier. No real customer, supplier or shop data is used; supplier and staff names are fictional. On the public demo, sign-in offers one-click demo accounts instead of displaying passwords.

@@ -120,7 +120,7 @@ def insights(returns, sales) -> list[str]:
                 best = (ratio, supplier, part, counts.idxmax(), n, typical)
         if best:
             _, supplier, part, month, n, typical = best
-            out.append(f"⚠️ **{part} repairs with {supplier} parts**: {n} comebacks in {month.strftime('%B')} "
+            out.append(f"⚠️ **{part} repairs using {supplier}**: {n} comebacks in {month.strftime('%B')} "
                        f"vs a typical {typical:.0f} a month. Likely a bad batch, so raise it with the supplier.")
 
     # 4. Money to claim back

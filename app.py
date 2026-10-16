@@ -1,7 +1,7 @@
 """Returns Tracker — Streamlit entry point. Run with: streamlit run app.py"""
 import streamlit as st
 
-from tracker.auth import DEMO_LOGINS, authenticate
+from tracker.auth import DEMO_LOGINS, DEMO_MODE, authenticate, demo_user
 from tracker.state import get_connection
 
 st.set_page_config(page_title="Returns Tracker", page_icon="📱", layout="wide")
@@ -22,10 +22,15 @@ def sign_in():
                     st.session_state.user = user
                     st.rerun()
                 st.error("Wrong username or password.")
-        with st.expander("Demo logins", expanded=True):
-            st.markdown("\n".join(f"- **{role}:** `{u}` / `{p}`" for u, p, role in DEMO_LOGINS))
-            st.caption("The manager sees everything, including the dashboard. Technicians and sales staff "
-                       "log returns and manage supplier claims.")
+        if DEMO_MODE:
+            st.markdown("**Or try the demo**")
+            cols = st.columns(len(DEMO_LOGINS))
+            for col, (username, _, role) in zip(cols, DEMO_LOGINS):
+                if col.button(f"Try as {role}", width="stretch", key=f"demo-{username}"):
+                    st.session_state.user = demo_user(conn, username)
+                    st.rerun()
+            st.caption("The manager sees everything, including the dashboard. Technicians and sales staff log "
+                       "returns and manage supplier claims. Demo data and supplier names are fictional.")
 
 
 user = st.session_state.get("user")
