@@ -6,13 +6,15 @@ import streamlit as st
 from tracker import db
 from tracker.policy import (CATEGORIES, OUTCOMES_BY_CATEGORY, REASONS, policy_warnings,
                             responsibility, suggests_supplier_claim)
+from tracker.state import get_connection
 
-conn = st.session_state.conn
+conn = get_connection()
 items = db.items(conn)
-staff = db.staff(conn)
+user = st.session_state.user
 
 st.title("📝 Log a return")
-st.caption("Repair comebacks and product returns. Takes about 30 seconds; every field except notes is required.")
+st.caption(f"Repair comebacks and product returns, logged by **{user['name']}**. "
+           "Takes about 30 seconds; every field except notes is required.")
 
 with st.container(border=True):
     category = st.segmented_control("What's coming back?", CATEGORIES, default="Repair")
@@ -42,8 +44,7 @@ with st.container(border=True):
 
     reason = c1.selectbox("Reason", REASONS[category], index=None, placeholder="Choose a reason")
     outcome = c2.radio("Outcome", OUTCOMES_BY_CATEGORY[category], index=None, horizontal=True)
-    staff_name = c1.selectbox("Logged by", staff["name"], index=None, placeholder="Your name")
-    notes = c2.text_input("Notes (optional)", max_chars=200, placeholder="e.g. touch dead in top corner")
+    notes = st.text_input("Notes (optional)", max_chars=200, placeholder="e.g. touch dead in top corner")
 
     days = (return_date - purchase_date).days
     m1, m2 = st.columns(2)
@@ -64,8 +65,7 @@ with st.container(border=True):
     for w in warnings:
         st.warning(f"**Outside policy:** {w}", icon="⚠️")
 
-    missing = [label for label, v in [("item", item), ("reason", reason), ("outcome", outcome),
-                                       ("staff name", staff_name)] if not v]
+    missing = [label for label, v in [("item", item), ("reason", reason), ("outcome", outcome)] if not v]
     if st.button("Save return", type="primary", width="stretch"):
         if missing:
             st.error(f"Please fill in: {', '.join(missing)}.")
@@ -77,7 +77,7 @@ with st.container(border=True):
                 return_date=return_date, purchase_date=purchase_date,
                 item_id=int(items.loc[items["label"] == item, "id"].iloc[0]),
                 reason=reason, outcome=outcome,
-                staff_id=int(staff.loc[staff["name"] == staff_name, "id"].iloc[0]),
+                staff_id=user["id"],
                 supplier_claim=claim, out_of_policy=bool(warnings), notes=notes.strip(),
             )
             extra = " Flagged as outside policy for the manager to review." if warnings else ""

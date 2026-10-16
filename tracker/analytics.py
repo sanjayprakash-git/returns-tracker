@@ -138,3 +138,66 @@ def insights(returns, sales) -> list[str]:
     if flagged:
         out.append(f"**{flagged}** returns were handled outside policy.")
     return out
+
+
+# ── Supplier claims (faulty stock → supplier → replacement / credit) ─────────────
+
+def claim_summary(claims) -> dict:
+    """Money in each stage of the claims process."""
+    status = claims["status"]
+    closed = claims[status == "Closed"]
+    rejected = closed["resolution"].str.startswith("Rejected", na=False)
+    return {
+        "in_faulty_stock": float(claims.loc[status == "In faulty stock", "value"].sum()),
+        "with_suppliers": float(claims.loc[status == "Sent to supplier", "value"].sum()),
+        "recovered": float(closed["recovered"].sum()),
+        "rejected": float(closed.loc[rejected, "value"].sum()),
+        "open_count": int((status != "Closed").sum()),
+    }
+
+
+def supplier_scorecard(claims) -> pd.DataFrame:
+    """Per supplier: claims, acceptance rate, days to resolve, value recovered and still open."""
+    if claims.empty:
+        return pd.DataFrame()
+    c = claims.assign(
+        closed=claims["status"] == "Closed",
+        accepted=(claims["status"] == "Closed") & ~claims["resolution"].str.startswith("Rejected", na=False),
+        days=(claims["resolved_date"] - claims["sent_date"]).dt.days,
+        open_value=claims["value"].where(claims["status"] != "Closed", 0),
+    )
+    g = c.groupby("supplier")
+    df = pd.DataFrame({
+        "claims": g.size(),
+        "units": g["quantity"].sum(),
+        "accepted_rate": g["accepted"].sum() / g["closed"].sum().replace(0, float("nan")),
+        "avg_days_to_resolve": g["days"].mean(),
+        "recovered": g["recovered"].sum(),
+        "still_open": g["open_value"].sum(),
+    })
+    return df.reset_index().sort_values("claims", ascending=False)
+
+
+def claim_insights(claims, today) -> list[str]:
+    if claims.empty:
+        return []
+    out = []
+    s = claim_summary(claims)
+    out.append(f"**€{s['in_faulty_stock'] + s['with_suppliers']:,.0f}** of faulty stock is waiting to be recovered: "
+               f"€{s['in_faulty_stock']:,.0f} still on the shelf and €{s['with_suppliers']:,.0f} with suppliers.")
+    waiting = claims[claims["status"] == "In faulty stock"]
+    if len(waiting):
+        oldest = (pd.Timestamp(today) - waiting["created_date"].min()).days
+        out.append(f"**{len(waiting)}** claims haven't been sent yet; the oldest has waited **{oldest} days**. "
+                   "Send them in this week's supplier box.")
+    card = supplier_scorecard(claims).dropna(subset=["avg_days_to_resolve"])
+    if len(card) >= 2:
+        slow = card.sort_values("avg_days_to_resolve").iloc[-1]
+        fast = card.sort_values("avg_days_to_resolve").iloc[0]
+        out.append(f"**{slow['supplier']}** takes **{slow['avg_days_to_resolve']:.0f} days** to settle a claim and accepts "
+                   f"{slow['accepted_rate']:.0%}, vs {fast['avg_days_to_resolve']:.0f} days for {fast['supplier']}.")
+    damaged = claims[claims["source"] == "Damaged on delivery"]
+    if len(damaged):
+        out.append(f"**{int(damaged['quantity'].sum())} units** arrived damaged in {len(damaged)} deliveries "
+                   f"(€{damaged['value'].sum():,.0f} at cost).")
+    return out

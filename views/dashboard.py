@@ -4,11 +4,12 @@ import streamlit as st
 
 from tracker import analytics, db
 from tracker.policy import CATEGORIES, PART_GRADES, PART_TYPES
+from tracker.state import get_connection
 
 BLUE, ORANGE, AQUA, YELLOW = "#2a78d6", "#eb6834", "#1baf7a", "#eda100"
 SEQ = ["#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#104281"]  # single-hue blue ramp, light → dark
 
-conn = st.session_state.conn
+conn = get_connection()
 returns, sales = db.returns_df(conn), db.sales_df(conn)
 
 st.title("📊 Manager dashboard")
@@ -30,8 +31,11 @@ k2.metric("Repair comeback rate", f"{len(rep_r) / rep_s['quantity'].sum():.1%}" 
           help="Repairs that came back ÷ repair jobs done")
 k3.metric("Cost of returns", f"€{analytics.cost_of_returns(r):,.0f}",
           help="Free re-repairs (part + labour), refunds, store credit and replacement stock")
-k4.metric("Claimable from suppliers", f"€{analytics.supplier_recoverable(r):,.0f}",
-          help="Cost of faulty parts/products marked for a supplier claim (RMA)")
+claims_in_period = db.claims_df(conn)
+claims_in_period = claims_in_period[(claims_in_period["created_date"].dt.date >= period[0])
+                                    & (claims_in_period["created_date"].dt.date <= period[1])]
+k4.metric("Recovered from suppliers", f"€{analytics.claim_summary(claims_in_period)['recovered']:,.0f}",
+          help="Credit notes, refunds and replacement stock from supplier claims logged in this period")
 k5.metric("Outside policy", int(r["out_of_policy"].sum()))
 
 with st.container(border=True):

@@ -16,6 +16,7 @@ import random
 from datetime import date, timedelta
 
 from tracker import db
+from tracker.auth import DEMO_LOGINS, hash_password
 from tracker.policy import policy_warnings, suggests_supplier_claim
 
 START, END = date(2026, 4, 1), date(2026, 9, 30)
@@ -69,8 +70,8 @@ ACCESSORIES = [  # subcategory, name, price, cost, sales weight, return rate, wa
     ("Storage & memory", "MicroSD card 128GB", 22, 8, 3, 0.010, 90),
     ("Storage & memory", "USB flash drive 64GB", 15, 5, 2, 0.008, 90),
 ]
-STAFF = [("Ciarán B.", "technician"), ("Priya S.", "technician"), ("Aoife M.", "sales"),
-         ("Tomás K.", "sales"), ("Mei L.", "manager")]
+STAFF = [("Ciarán B.", "technician", "ciaran"), ("Priya S.", "technician", "priya"), ("Aoife M.", "sales", "aoife"),
+         ("Tomás K.", "sales", "tomas"), ("Mei L.", "manager", "mei")]
 
 BRAND_SHARE = {"Apple": 45, "Samsung": 30, "Google": 12, "OnePlus": 13}
 PART_SHARE = {"Screen": 50, "Battery": 25, "Charging port flex": 10, "Sensor flex": 5, "Back glass": 6, "Camera": 4}
@@ -205,12 +206,99 @@ def _product_return(rng, category, subcategory, rate, warranty=None):
     return reason, days, outcome
 
 
+# How each supplier handles claims: days to respond, acceptance rate, what they give back when accepted
+SUPPLIER_TERMS = {
+    "Supplier A": ((7, 14), 0.95, {"Credit note": 70, "Replacement stock": 30}),
+    "Supplier B": ((10, 20), 0.88, {"Replacement stock": 60, "Credit note": 40}),
+    "Supplier C": ((15, 40), 0.70, {"Replacement stock": 50, "Credit note": 50}),
+    "Supplier D": ((5, 12), 0.90, {"Replacement stock": 70, "Credit note": 30}),
+    "Refurb partner": ((10, 20), 0.85, {"Refund": 50, "Replacement stock": 50}),
+}
+
+
+def _claim_lifecycle(rng, supplier, created, quantity, cost, repair_part, quick=False):
+    """Simulate a claim from faulty stock to closed, as of END."""
+    sent = created + timedelta(days=rng.randint(0, 3) if quick else rng.randint(2, 10))  # sent in weekly batches
+    if sent > END:
+        return ("In faulty stock", None, None, None, None, None, None)
+    rma = f"RMA-{supplier[-1] if supplier.startswith('Supplier') else 'R'}{rng.randint(1000, 9999)}"
+    (lo, hi), accept_rate, accepted = SUPPLIER_TERMS[supplier]
+    resolved = sent + timedelta(days=rng.randint(lo, hi))
+    if resolved > END:
+        return ("Sent to supplier", sent, rma, None, None, None, None)
+    if rng.random() < accept_rate:
+        resolution = _pick(rng, accepted)
+    else:
+        resolution = _pick(rng, {"Rejected - written off": 50,
+                                 "Rejected - used for parts" if repair_part else "Rejected - repaired & resold": 50})
+    replacement = quantity if resolution == "Replacement stock" else None
+    credit = round(cost * quantity * (0.8 if supplier == "Supplier C" else 1.0), 2) \
+        if resolution in ("Credit note", "Refund") else None
+    return ("Closed", sent, rma, resolution, replacement, credit, resolved)
+
+
+def _seed_claims(conn, rng, rows):
+    claims = []
+    linked = conn.execute(
+        """SELECT r.id, r.return_date, r.item_id, r.reason, i.supplier, i.cost, i.category
+           FROM returns r JOIN items i ON i.id = r.item_id WHERE r.supplier_claim = 1""").fetchall()
+    for return_id, return_date, item_id, reason, supplier, cost, category in linked:
+        created = date.fromisoformat(return_date)
+        claims.append((created, "Customer return", return_id, item_id, 1, reason,
+                       _claim_lifecycle(rng, supplier, created, 1, cost, category == "Repair")))
+
+    by_name = {(r[1], r[5]): r for r in rows}  # (category, name) -> row
+    deliveries = [  # damaged deliveries: (item name, category, problem, qty range)
+        ("Power bank 20,000mAh", "Accessory", "Box crushed / packaging damaged", (2, 6)),
+        ("Power bank 10,000mAh", "Accessory", "Dead on arrival (won't power on)", (1, 3)),
+        ("45W fast charger", "Accessory", "Item broken on arrival", (1, 4)),
+        ("Wireless earbuds", "Accessory", "Dead on arrival (won't power on)", (1, 3)),
+        ("Rugged case", "Accessory", "Wrong item delivered", (3, 10)),
+        ("Tempered glass protector", "Accessory", "Item broken on arrival", (5, 20)),
+        ("Bluetooth speaker", "Accessory", "Box crushed / packaging damaged", (1, 2)),
+        ("Clear case", "Accessory", "Missing items / short delivery", (5, 15)),
+    ]
+    screens = [r for r in rows if r[1] == "Repair" and r[5] == "Screen"]
+    day = START + timedelta(days=rng.randint(2, 8))
+    while day <= END:
+        if rng.random() < 0.3:
+            item = rng.choice(screens)
+            qty, problem = rng.randint(1, 3), "Item broken on arrival"
+        else:
+            name, category, problem, (lo, hi) = rng.choice(deliveries)
+            item, qty = by_name[(category, name)], rng.randint(lo, hi)
+        cost = conn.execute("SELECT cost FROM items WHERE id = ?", (item[0],)).fetchone()[0]
+        claims.append((day, "Damaged on delivery", None, item[0], qty, problem,
+                       _claim_lifecycle(rng, item[7], day, qty, cost, item[1] == "Repair", quick=True)))
+        day += timedelta(days=rng.randint(6, 14))
+
+    accessories = [r for r in rows if r[1] == "Accessory" and r[2] in ("Charging", "Power banks", "Audio")]
+    for _ in range(8):
+        day = START + timedelta(days=rng.randint(0, (END - START).days))
+        item = rng.choice(accessories)
+        cost = conn.execute("SELECT cost FROM items WHERE id = ?", (item[0],)).fetchone()[0]
+        qty = rng.randint(1, 2)
+        claims.append((day, "Found faulty in stock", None, item[0], qty, "Fails pre-sale test",
+                       _claim_lifecycle(rng, item[7], day, qty, cost, False, quick=True)))
+
+    conn.executemany(
+        """INSERT INTO supplier_claims (created_date, source, return_id, item_id, quantity, problem, status,
+                                        sent_date, rma_reference, resolution, replacement_qty, credit_value,
+                                        resolved_date)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        [(c.isoformat(), src, rid, iid, qty, prob, st, sd and sd.isoformat(), rma, res, rq, cv, rd and rd.isoformat())
+         for c, src, rid, iid, qty, prob, (st, sd, rma, res, rq, cv, rd) in claims])
+
+
 def seed(conn, rng_seed: int = 7) -> None:
     rng = random.Random(rng_seed)
     conn.executemany(
         """INSERT INTO items (category, subcategory, brand, device, name, part_grade, supplier, warranty_days, price, cost)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", _catalogue())
-    conn.executemany("INSERT INTO staff (name, role) VALUES (?, ?)", STAFF)
+    demo_passwords = {user: password for user, password, _ in DEMO_LOGINS}
+    conn.executemany("INSERT INTO staff (name, role, username, password_hash) VALUES (?, ?, ?, ?)",
+                     [(name, role, user, hash_password(demo_passwords.get(user, f"{user}-demo")))
+                      for name, role, user in STAFF])
     rows = conn.execute("SELECT id, category, subcategory, brand, device, name, part_grade, supplier, warranty_days FROM items").fetchall()
     staff = {role: [i for i, r in conn.execute("SELECT id, role FROM staff") if r == role]
              for role in ("technician", "sales", "manager")}
@@ -272,6 +360,7 @@ def seed(conn, rng_seed: int = 7) -> None:
         """INSERT INTO returns (return_date, purchase_date, days_since_purchase, item_id, reason, outcome,
                                 staff_id, supplier_claim, out_of_policy, notes)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", returns)
+    _seed_claims(conn, rng, rows)
     conn.commit()
 
 

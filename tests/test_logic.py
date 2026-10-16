@@ -79,6 +79,58 @@ class AnalyticsTests(unittest.TestCase):
         self.assertAlmostEqual(analytics.supplier_recoverable(self.returns), 30 + 2.5)
 
 
+class ClaimTests(unittest.TestCase):
+    def setUp(self):
+        self.conn = sqlite3.connect(":memory:")
+        db.init_db(self.conn)
+        self.conn.execute("INSERT INTO staff (name, role) VALUES ('Tester', 'sales')")
+        self.conn.execute("""INSERT INTO items (category, subcategory, brand, name, supplier, warranty_days, price, cost)
+                             VALUES ('Accessory', 'Power banks', 'Universal', 'Power bank 20,000mAh', 'Supplier D', 90, 49, 16)""")
+
+    def test_faulty_customer_return_goes_into_faulty_stock(self):
+        from datetime import date
+        rid = db.add_return(self.conn, return_date=date(2026, 6, 14), purchase_date=date(2026, 6, 1), item_id=1,
+                            reason="Faulty", outcome="Refund", staff_id=1, supplier_claim=True, out_of_policy=False)
+        claims = db.claims_df(self.conn)
+        self.assertEqual(len(claims), 1)
+        self.assertEqual(claims.iloc[0]["return_id"], rid)
+        self.assertEqual(claims.iloc[0]["status"], "In faulty stock")
+
+    def test_claim_lifecycle_and_recovered_value(self):
+        from datetime import date
+        cid = db.add_claim(self.conn, created_date=date(2026, 6, 1), source="Damaged on delivery", item_id=1,
+                           quantity=3, problem="Box crushed / packaging damaged")
+        db.mark_claim_sent(self.conn, cid, date(2026, 6, 3), "RMA-1234")
+        self.assertEqual(db.claims_df(self.conn).iloc[0]["status"], "Sent to supplier")
+        db.close_claim(self.conn, cid, "Replacement stock", date(2026, 6, 12), replacement_qty=3)
+        claims = db.claims_df(self.conn)
+        summary = analytics.claim_summary(claims)
+        self.assertEqual(claims.iloc[0]["status"], "Closed")
+        self.assertAlmostEqual(summary["recovered"], 3 * 16)   # 3 replacement units at cost
+        self.assertEqual(summary["open_count"], 0)
+        card = analytics.supplier_scorecard(claims).set_index("supplier")
+        self.assertEqual(card.loc["Supplier D", "accepted_rate"], 1.0)
+        self.assertEqual(card.loc["Supplier D", "avg_days_to_resolve"], 9)
+
+
+class AuthTests(unittest.TestCase):
+    def test_password_hash_round_trip(self):
+        from tracker.auth import hash_password, verify_password
+        h = hash_password("s3cret")
+        self.assertNotIn("s3cret", h)
+        self.assertTrue(verify_password("s3cret", h))
+        self.assertFalse(verify_password("wrong", h))
+
+    def test_demo_accounts_sign_in_with_roles(self):
+        from tracker.auth import DEMO_LOGINS, authenticate
+        conn = sqlite3.connect(":memory:")
+        db.init_db(conn)
+        seed(conn)
+        for username, password, role in DEMO_LOGINS:
+            self.assertEqual(authenticate(conn, username, password)["role"], role.lower())
+        self.assertIsNone(authenticate(conn, "mei", "wrong-password"))
+
+
 class SeedTests(unittest.TestCase):
     def test_seed_is_mostly_repair_comebacks(self):
         conn = sqlite3.connect(":memory:")

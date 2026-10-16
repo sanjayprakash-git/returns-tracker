@@ -1,26 +1,49 @@
 """Returns Tracker — Streamlit entry point. Run with: streamlit run app.py"""
 import streamlit as st
 
-from tracker import db
-from tracker.seed import seed
+from tracker.auth import DEMO_LOGINS, authenticate
+from tracker.state import get_connection
 
 st.set_page_config(page_title="Returns Tracker", page_icon="📱", layout="wide")
+conn = get_connection()  # create and seed the database on first start
 
 
-@st.cache_resource
-def get_connection():
-    conn = db.connect()
-    db.init_db(conn)
-    if db.is_empty(conn):  # free hosting resets storage on restart, so reload the demo data
-        seed(conn)
-    return conn
+def sign_in():
+    _, middle, _ = st.columns([1, 1.2, 1])
+    with middle:
+        st.title("📱 Returns Tracker")
+        st.caption("Repair comebacks, product returns and supplier claims for a phone repair & accessories shop.")
+        with st.form("sign-in"):
+            username = st.text_input("Username")
+            password = st.text_input("Password", type="password")
+            if st.form_submit_button("Sign in", type="primary", width="stretch"):
+                user = authenticate(conn, username, password)
+                if user:
+                    st.session_state.user = user
+                    st.rerun()
+                st.error("Wrong username or password.")
+        with st.expander("Demo logins", expanded=True):
+            st.markdown("\n".join(f"- **{role}:** `{u}` / `{p}`" for u, p, role in DEMO_LOGINS))
+            st.caption("The manager sees everything, including the dashboard. Technicians and sales staff "
+                       "log returns and manage supplier claims.")
 
 
-st.session_state.conn = get_connection()
+user = st.session_state.get("user")
+if not user:
+    st.navigation([st.Page(sign_in, title="Sign in", icon="🔐")]).run()
+    st.stop()
 
-pages = st.navigation([
-    st.Page("pages/log_return.py", title="Log a return", icon="📝"),
-    st.Page("pages/returns_log.py", title="Returns log", icon="📋"),
-    st.Page("pages/dashboard.py", title="Manager dashboard", icon="📊", default=True),
-])
-pages.run()
+with st.sidebar:
+    st.markdown(f"Signed in as **{user['name']}**  \n{user['role'].capitalize()}")
+    if st.button("Sign out"):
+        del st.session_state.user
+        st.rerun()
+
+pages = [
+    st.Page("views/log_return.py", title="Log a return", icon="📝", default=user["role"] != "manager"),
+    st.Page("views/returns_log.py", title="Returns log", icon="📋"),
+    st.Page("views/supplier_claims.py", title="Supplier claims", icon="📦"),
+]
+if user["role"] == "manager":
+    pages.append(st.Page("views/dashboard.py", title="Manager dashboard", icon="📊", default=True))
+st.navigation(pages).run()

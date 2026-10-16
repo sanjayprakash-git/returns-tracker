@@ -3,8 +3,9 @@ import streamlit as st
 
 from tracker import db
 from tracker.policy import ALL_REASONS, CATEGORIES, OUTCOMES
+from tracker.state import get_connection
 
-conn = st.session_state.conn
+conn = get_connection()
 df = db.returns_df(conn)
 
 st.title("📋 Returns log")

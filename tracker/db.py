@@ -23,7 +23,9 @@ CREATE TABLE IF NOT EXISTS items (
 CREATE TABLE IF NOT EXISTS staff (
     id      INTEGER PRIMARY KEY,
     name    TEXT NOT NULL UNIQUE,
-    role    TEXT NOT NULL CHECK (role IN ('technician', 'sales', 'manager'))
+    role    TEXT NOT NULL CHECK (role IN ('technician', 'sales', 'manager')),
+    username      TEXT UNIQUE,
+    password_hash TEXT
 );
 CREATE TABLE IF NOT EXISTS sales (               -- repair jobs and product sales
     id          INTEGER PRIMARY KEY,
@@ -44,6 +46,25 @@ CREATE TABLE IF NOT EXISTS returns (             -- repair comebacks and product
     supplier_claim      INTEGER NOT NULL DEFAULT 0,
     out_of_policy       INTEGER NOT NULL DEFAULT 0,
     notes               TEXT
+);
+CREATE TABLE IF NOT EXISTS supplier_claims (     -- faulty stock going back to suppliers (RMA)
+    id              INTEGER PRIMARY KEY,
+    created_date    TEXT NOT NULL,
+    source          TEXT NOT NULL CHECK (source IN ('Customer return', 'Damaged on delivery', 'Found faulty in stock')),
+    return_id       INTEGER REFERENCES returns(id),
+    item_id         INTEGER NOT NULL REFERENCES items(id),
+    quantity        INTEGER NOT NULL CHECK (quantity > 0),
+    problem         TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'In faulty stock'
+                    CHECK (status IN ('In faulty stock', 'Sent to supplier', 'Closed')),
+    sent_date       TEXT,
+    rma_reference   TEXT,
+    resolution      TEXT CHECK (resolution IN ('Replacement stock', 'Credit note', 'Refund', 'Rejected - written off',
+                                               'Rejected - used for parts', 'Rejected - repaired & resold')),
+    replacement_qty INTEGER,
+    credit_value    REAL,
+    resolved_date   TEXT,
+    notes           TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_sales_date ON sales(sale_date);
 CREATE INDEX IF NOT EXISTS idx_returns_date ON returns(return_date);
@@ -83,7 +104,7 @@ def items(conn) -> pd.DataFrame:
 
 
 def staff(conn) -> pd.DataFrame:
-    return pd.read_sql("SELECT id, name, role FROM staff ORDER BY name", conn)
+    return pd.read_sql("SELECT id, name, role, username FROM staff ORDER BY name", conn)
 
 
 def add_return(conn, *, return_date, purchase_date, item_id, reason, outcome, staff_id,
@@ -96,8 +117,68 @@ def add_return(conn, *, return_date, purchase_date, item_id, reason, outcome, st
         (return_date.isoformat(), purchase_date.isoformat(), days, item_id, reason, outcome,
          staff_id, int(supplier_claim), int(out_of_policy), notes or None),
     )
+    if supplier_claim:  # the faulty unit goes into faulty stock, waiting to go back to the supplier
+        add_claim(conn, created_date=return_date, source="Customer return", item_id=item_id, quantity=1,
+                  problem=reason, return_id=cur.lastrowid, commit=False)
     conn.commit()
     return cur.lastrowid
+
+
+CLAIM_PROBLEMS = {
+    "Customer return": None,  # problem = the customer's return reason
+    "Damaged on delivery": ["Box crushed / packaging damaged", "Item broken on arrival", "Dead on arrival (won't power on)",
+                            "Wrong item delivered", "Missing items / short delivery"],
+    "Found faulty in stock": ["Dead on arrival (won't power on)", "Item broken on arrival", "Fails pre-sale test"],
+}
+RESOLUTIONS = ["Replacement stock", "Credit note", "Refund", "Rejected - written off",
+               "Rejected - used for parts", "Rejected - repaired & resold"]
+
+
+def add_claim(conn, *, created_date, source, item_id, quantity, problem, return_id=None, notes=None,
+              commit=True) -> int:
+    cur = conn.execute(
+        """INSERT INTO supplier_claims (created_date, source, return_id, item_id, quantity, problem, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (created_date.isoformat(), source, return_id, item_id, quantity, problem, notes or None),
+    )
+    if commit:
+        conn.commit()
+    return cur.lastrowid
+
+
+def mark_claim_sent(conn, claim_id: int, sent_date, rma_reference: str) -> None:
+    conn.execute("""UPDATE supplier_claims SET status = 'Sent to supplier', sent_date = ?, rma_reference = ?
+                    WHERE id = ? AND status = 'In faulty stock'""",
+                 (sent_date.isoformat(), rma_reference.strip() or None, claim_id))
+    conn.commit()
+
+
+def close_claim(conn, claim_id: int, resolution: str, resolved_date, replacement_qty=None, credit_value=None,
+                notes=None) -> None:
+    conn.execute(
+        """UPDATE supplier_claims SET status = 'Closed', resolution = ?, resolved_date = ?, replacement_qty = ?,
+                  credit_value = ?, notes = COALESCE(?, notes)
+           WHERE id = ? AND status != 'Closed'""",
+        (resolution, resolved_date.isoformat(), replacement_qty, credit_value, notes or None, claim_id))
+    conn.commit()
+
+
+def claims_df(conn) -> pd.DataFrame:
+    df = pd.read_sql(
+        """SELECT c.*, i.category, i.subcategory, i.brand, i.device, i.name, i.part_grade, i.supplier, i.cost
+           FROM supplier_claims c JOIN items i ON i.id = c.item_id
+           ORDER BY c.created_date DESC, c.id DESC""",
+        conn,
+    )
+    for col in ("created_date", "sent_date", "resolved_date"):
+        df[col] = pd.to_datetime(df[col])
+    df["item"] = df.apply(item_label, axis=1) if len(df) else ""
+    df["value"] = df["cost"] * df["quantity"]  # what the faulty stock cost us
+    # value recovered: credit/refund amount, or replacement units at cost
+    df["recovered"] = df["credit_value"].fillna(0) + df["replacement_qty"].fillna(0) * df["cost"]
+    df["notes"] = df["notes"].fillna("")
+    df["rma_reference"] = df["rma_reference"].fillna("")
+    return df
 
 
 def return_cost(df: pd.DataFrame) -> pd.Series:

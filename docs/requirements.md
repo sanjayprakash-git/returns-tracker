@@ -2,7 +2,7 @@
 
 **Project:** Repair comeback and returns tracking for a phone repair & accessories shop
 **Author:** Sanjay Prakash Ravi
-**Status:** v2.0
+**Status:** v3.0
 
 ---
 
@@ -17,6 +17,7 @@ Today these are handled at the counter and re-repaired, refunded or swapped, but
 - **Bad batches are spotted late.** A run of faulty batteries is only noticed after many customers have come back.
 - **Workmanship and part faults get mixed up.** Without a reason code, a fitting issue looks the same as a faulty part, so technician training needs are invisible.
 - **Warranty and returns policy is applied inconsistently.** Free re-repairs are given after the 90-day warranty, and change-of-mind refunds after 14 days.
+- **Faulty stock has no process.** Once the customer is refunded or given credit, the faulty unit (e.g. a power bank that failed within two weeks) sits in a drawer. Stock that arrives damaged from a supplier (crushed boxes, broken units) is handled by phone or WhatsApp with no record of whether replacement stock or a credit note ever arrived.
 
 **Goal:** give staff a 30-second way to log every comeback and return in a consistent format, and give the manager a dashboard that shows which parts, grades and suppliers come back, what it costs, and how much can be claimed back.
 
@@ -26,7 +27,7 @@ Today these are handled at the counter and re-repaired, refunded or swapped, but
 |---|---|
 | Comebacks and returns logged | 100% (vs. an estimated 50–60% today) |
 | Time to log one | Under 30 seconds |
-| Supplier claims raised for faulty parts | Every eligible part, with value tracked |
+| Supplier claims raised for faulty parts and damaged deliveries | Every eligible unit, tracked until replacement stock, credit or refund is received |
 | Out-of-policy re-repairs and refunds | Flagged at the counter before they happen |
 | Manager reporting | Instant, instead of nothing or a manual count |
 
@@ -46,9 +47,9 @@ Today these are handled at the counter and re-repaired, refunded or swapped, but
 
 ## 3. Scope
 
-**In scope (v2):** logging repair comebacks and product returns across four types (repairs, new phones, reconditioned phones, accessories, with accessory groups); a filterable returns log; a manager dashboard with comeback rates by part and grade, worst repairs, reasons by responsibility, monthly trend, accessory returns by group, outcomes, cost of returns and claimable supplier value; automatic insights; warranty and policy checks.
+**In scope (v3):** staff sign-in with roles; logging repair comebacks and product returns across four types (repairs, new phones, reconditioned phones, accessories, with accessory groups); a filterable returns log; a manager dashboard with comeback rates by part and grade, worst repairs, reasons by responsibility, monthly trend, accessory returns by group, outcomes, cost of returns and claimable supplier value; automatic insights; warranty and policy checks; a supplier claims (RMA) process for faulty stock from customer returns, damaged deliveries and pre-sale test failures, with a supplier scorecard.
 
-**Out of scope:** POS or repair-ticketing integration, customer personal data, payment processing, the supplier claim workflow itself, stock control, multi-store logins.
+**Out of scope:** POS or repair-ticketing integration, customer personal data, payment processing, full stock control, password reset and single sign-on, multi-store accounts.
 
 ---
 
@@ -111,6 +112,36 @@ As the manager, I want the cost of returns and the value claimable from supplier
 **US-12: Get the headline without reading charts**
 - At least four automatically written insights appear at the top and update with the filters: grade comparison with avoidable comebacks, worst repair, bad-batch alert, claimable value, workmanship share.
 
+### Faulty stock and supplier claims
+
+**US-13: Faulty customer returns go into faulty stock automatically**
+As a staff member, when I mark a customer return for a supplier claim, I want the faulty unit to appear in faulty stock, so that it isn't forgotten after the customer is sorted out.
+- Saving a return with the supplier claim ticked creates a claim with status "In faulty stock", linked to the return.
+- The customer outcome (refund, exchange, store credit) is independent of what happens with the supplier.
+
+**US-14: Log damaged deliveries and pre-sale test failures**
+As a staff member, I want to log stock that arrives damaged or fails testing before it's sold, with a quantity, so that I can claim it back from the supplier.
+- Source: damaged on delivery or found faulty in stock; problem from a fixed list (box crushed, broken on arrival, dead on arrival, wrong item, short delivery, fails pre-sale test).
+- Item, quantity and supplier are recorded; the value at cost is shown before saving.
+
+**US-15: Track each claim to the end**
+As a staff member, I want to mark a claim as sent (with the supplier's RMA reference) and then record what came back, so that we know every claim's outcome.
+- Statuses: In faulty stock → Sent to supplier → Closed.
+- Outcomes: replacement stock (units received), credit note (amount), refund (amount), or rejected: written off, used for parts, or repaired & resold.
+
+**US-16: Know what's owed and which suppliers are good to deal with**
+As the manager, I want the value in faulty stock, with suppliers, recovered and rejected, and a scorecard per supplier, so that I can chase claims and choose suppliers.
+- Scorecard: claims, units, acceptance rate, average days to settle, value recovered, value still open.
+- Insights flag claims waiting to be sent, slow suppliers and damaged-delivery volume.
+
+### Access
+
+**US-17: Sign in with a role**
+As the owner, I want each staff member to sign in, so that records show who logged them and only the manager sees the business dashboard.
+- Username and password; passwords stored as salted hashes, never in plain text.
+- Technicians and sales staff see Log a return, Returns log and Supplier claims; the manager also sees the Manager dashboard.
+- "Logged by" is taken from the signed-in user.
+
 ---
 
 ## 5. Data model
@@ -121,6 +152,8 @@ erDiagram
     ITEMS ||--o{ RETURNS : "came back as"
     STAFF ||--o{ SALES : handles
     STAFF ||--o{ RETURNS : logs
+    RETURNS ||--o| SUPPLIER_CLAIMS : "faulty unit claimed"
+    ITEMS ||--o{ SUPPLIER_CLAIMS : "claimed as"
 
     ITEMS {
         int id PK
@@ -139,6 +172,8 @@ erDiagram
         int id PK
         text name
         text role "technician, sales, manager"
+        text username
+        text password_hash "salted PBKDF2"
     }
     SALES {
         int id PK
@@ -159,6 +194,22 @@ erDiagram
         int supplier_claim "0 or 1"
         int out_of_policy "0 or 1"
         text notes
+    }
+    SUPPLIER_CLAIMS {
+        int id PK
+        date created_date
+        text source "Customer return, Damaged on delivery, Found faulty in stock"
+        int return_id FK "for customer returns"
+        int item_id FK
+        int quantity
+        text problem
+        text status "In faulty stock, Sent to supplier, Closed"
+        date sent_date
+        text rma_reference
+        text resolution "Replacement stock, Credit note, Refund, Rejected - ..."
+        int replacement_qty
+        real credit_value
+        date resolved_date
     }
 ```
 
@@ -212,6 +263,19 @@ flowchart TD
     K --> L[Actions: change grade or supplier,<br/>raise claims, train technicians]
 ```
 
+### Faulty stock → supplier (to-be)
+
+```mermaid
+flowchart LR
+    A[Faulty customer return] --> D[(Faulty stock)]
+    B[Damaged delivery] --> D
+    C[Fails pre-sale test] --> D
+    D -->|weekly supplier box,<br/>RMA reference| E[Sent to supplier]
+    E --> F{Supplier decision}
+    F -->|Accepted| G[Replacement stock,<br/>credit note or refund]
+    F -->|Rejected| H[Write off, use for parts,<br/>or repair & resell]
+```
+
 ---
 
 ## 7. Business rules
@@ -225,6 +289,8 @@ flowchart TD
 | BR-05 | Reconditioned phones carry a 180-day warranty. Accessories carry 30 or 90 days depending on the product: 30 days for cases, screen protectors, cables, mounts and straps; 90 days for chargers, power banks, earbuds, speakers and memory. The warranty is stored on each item and shown on the form. |
 | BR-06 | Faulty parts and products are tagged for a supplier claim; workmanship and customer damage are never claimed. |
 | BR-07 | Comeback/return rate = returns ÷ jobs or units sold, for the same item and period. |
+| BR-08 | Every faulty unit stays on the claims list until it's closed with an outcome; the customer's refund or credit is decided separately. |
+| BR-09 | Claim value = unit cost × quantity. Recovered = credit/refund amount, or replacement units at cost. |
 
 ---
 
@@ -235,6 +301,7 @@ flowchart TD
 3. The reason list covers almost all real comebacks (anything else goes in notes).
 4. A free re-repair costs the shop the replacement part plus about €15 of technician time.
 5. Suppliers accept claims for parts that fail within warranty when the part, date and fault are recorded.
+6. Faulty stock is sent back in a weekly batch per supplier.
 
 ---
 
