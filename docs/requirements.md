@@ -41,7 +41,7 @@ The same thing happens with repair parts used but not deducted, deliveries that 
 |---|---|---|---|
 | **Sales staff** | Swap and refund faulty products at the counter, book in deliveries | One quick step; no paperwork; clear guidance on warranty | High (adoption depends on them) |
 | **Technicians** | Repair phones, handle comebacks, use parts | Parts deducted per job; faulty parts tracked | High |
-| **Shop manager / owner** | Buys stock, chooses suppliers, owns profit | Accurate stock, faulty bin returned monthly, loss and recovery figures, supplier performance | High (decision maker) |
+| **Shop manager / owner** | Buys stock, chooses suppliers, owns profit | Accurate stock, faulty box returned monthly, loss and recovery figures, supplier performance | High (decision maker) |
 | **Suppliers** | Accept or reject faulty returns | Batched returns with RMA reference, quantities and dates | Indirect, but they decide recovery |
 | **Customers** | Return faulty products | Quick, fair swap | Indirect |
 
@@ -52,12 +52,13 @@ The same thing happens with repair parts used but not deducted, deliveries that 
 **In scope:**
 - Staff sign-in with roles.
 - A counter page (faulty swap or refund, delivery in with damaged units, found faulty on the shelf).
-- A stock ledger (shelf, faulty bin, with supplier) with a full movement trail.
+- A stock ledger (shelf, faulty box, with supplier) with a full movement trail.
 - Stock counts with variance.
-- A faulty bin with batched returns to suppliers and tracking of the supplier's decision.
+- A faulty box with batched returns to suppliers and tracking of the supplier's decision.
 - A loss & recovery report.
-- Repair comeback and returns logging with warranty checks.
-- A repair-comeback dashboard.
+- Repair comebacks logged from the counter with warranty checks, and repair comeback rates on the manager's page.
+
+The app has four pages: **Counter**, **Faulty box** and **Stock** for everyone, and **Money** for the manager.
 
 **Out of scope:** POS integration (sales are entered by the till today), purchase orders, customer data, payments, multi-store accounts, barcode scanning (a good next step).
 
@@ -70,7 +71,7 @@ The same thing happens with repair parts used but not deducted, deliveries that 
 **US-01: Faulty swap in one step**
 As a sales staff member, I want to record a faulty swap in one action, so that the customer gets a new unit and stock stays correct without extra work.
 - Pick the product (search or group), the fault, and what the customer gets: swap, refund or store credit.
-- Saving a swap moves **1 replacement off the shelf** and **1 faulty unit into the faulty bin**, recorded with my name and the date.
+- Saving a swap moves **1 replacement off the shelf** and **1 faulty unit into the faulty box**, recorded with my name and the date.
 - A refund or store credit moves only the faulty unit into the bin.
 - If none are left on the shelf, a swap can't be saved and the screen suggests a refund or credit.
 
@@ -79,17 +80,17 @@ As a sales staff member, I want to record a faulty swap in one action, so that t
 - No receipt is allowed and noted.
 
 **US-03: Book in a delivery, including damaged units**
-As a staff member, I want to book in a delivery and enter how many arrived damaged, so that damaged units go straight to the faulty bin instead of the shelf.
-- Units OK go to the shelf; damaged units go to the faulty bin with the damage type.
+As a staff member, I want to book in a delivery and enter how many arrived damaged, so that damaged units go straight to the faulty box instead of the shelf.
+- Units OK go to the shelf; damaged units go to the faulty box with the damage type.
 - The screen shows the shelf before and after, and the value of damaged stock to claim.
 
 **US-04: Faulty stock found on the shelf**
-- Units that fail a pre-sale test or are found damaged move from the shelf to the faulty bin, with a reason.
+- Units that fail a pre-sale test or are found damaged move from the shelf to the faulty box, with a reason.
 
 ### Stock
 
 **US-05: See where every unit is**
-As the manager, I want each product's units on the shelf, in the faulty bin and with suppliers, so that reorder decisions use real numbers.
+As the manager, I want each product's units on the shelf, in the faulty box and with suppliers, so that reorder decisions use real numbers.
 - Low-stock flag at the reorder level; filter by group, search, and faulty units.
 
 **US-06: Stock count with a trail**
@@ -100,9 +101,9 @@ As the manager, I want to count the shelf and see the difference against the sys
 **US-07: Who moved what**
 As the manager, I want a movement history I can filter by item, movement type and staff member, so that I can answer "where did it go and who took it".
 
-### Faulty bin & suppliers
+### Faulty box & suppliers
 
-**US-08: Faulty bin grouped by supplier**
+**US-08: Faulty box grouped by supplier**
 - The bin is grouped by supplier, with units, value and how long the oldest unit has waited.
 - Groups waiting over 30 days are highlighted, because suppliers often refuse old claims.
 
@@ -111,7 +112,7 @@ As a staff member, I want to send everything in the bin for one supplier in one 
 - Creates one claim line per product under one RMA reference and moves the units from the bin to "with supplier".
 
 **US-10: Record what the supplier did**
-- Outcomes: replacement stock (units go back on the shelf), credit note or refund (amount), rejected and written off, or rejected and repaired & resold (back on the shelf).
+- *New stock* (units back on the shelf), *Credit / refund* (amount), or *Refused*, then write off, or repair and resell (back on the shelf).
 
 **US-11: Supplier scorecard**
 - Per supplier: units and value sent, acceptance rate, average days to settle, value recovered and still open.
@@ -132,13 +133,13 @@ As the manager, I want faulty stock value, recovered, still to recover, written 
 ### Repairs (secondary)
 
 **US-15: Repair parts deducted per job**
-- Each repair uses one part from the shelf; a free re-repair uses another; the faulty part from a comeback goes into the faulty bin.
+- Each repair uses one part from the shelf; a free re-repair uses another; the faulty part from a comeback goes into the faulty box.
 
 **US-16: Repair comebacks with warranty and responsibility**
-- Device · part · grade, reason, outcome, days since repair; a 90-day warranty check; responsibility shown (part fault, workmanship, customer damage).
+- Logged from the Counter: device · part · grade, reason, outcome, optional repair date; a 90-day warranty check; responsibility shown (part fault, workmanship, customer damage).
 
 **US-17: Sign in with a role**
-- Passwords are stored as salted hashes. Staff see the daily pages; the manager also sees Loss & recovery and the repair dashboard. On the public demo, one-click demo accounts replace visible passwords.
+- Passwords are stored as salted hashes. Staff see Counter, Faulty box and Stock; the manager also sees Money. On the public demo, one-click demo accounts replace visible passwords.
 
 ---
 
@@ -225,7 +226,7 @@ flowchart TD
 flowchart TD
     A[Customer returns a faulty product] --> B[Counter: Faulty swap, 10 seconds]
     B --> C[Replacement off the shelf]
-    B --> D[(Faulty bin)]
+    B --> D[(Faulty box)]
     E[Damaged delivery] --> D
     F[Fails pre-sale test] --> D
     G[Repair comeback part] --> D
@@ -243,9 +244,9 @@ flowchart TD
 
 | ID | Rule |
 |---|---|
-| BR-01 | A faulty swap always records two movements: replacement shelf → customer and faulty unit customer → faulty bin. |
-| BR-02 | Damaged units in a delivery go to the faulty bin, never to the shelf. |
-| BR-03 | The faulty bin is returned to each supplier at least monthly. Units waiting over 30 days are flagged. |
+| BR-01 | A faulty swap always records two movements: replacement shelf → customer and faulty unit customer → faulty box. |
+| BR-02 | Damaged units in a delivery go to the faulty box, never to the shelf. |
+| BR-03 | The faulty box is returned to each supplier at least monthly. Units waiting over 30 days are flagged. |
 | BR-04 | Supplier outcomes: replacement stock goes back on the shelf; credit/refund is recorded as an amount; rejected units are written off or repaired and resold. |
 | BR-05 | Stock counts never overwrite stock; the difference is recorded as a movement to or from "unexplained" with who, when and a note. |
 | BR-06 | Product warranties: 30 days (cases, protectors, cables, wired earphones, mounts, straps, toys) or 90 days (chargers, power banks, earbuds, speakers, smartwatches, gaming, memory); repairs 90 days; reconditioned phones 180 days. |

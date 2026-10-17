@@ -161,6 +161,9 @@ class SeedTests(unittest.TestCase):
         self.assertEqual(int((levels[["shelf", "faulty_bin", "with_supplier"]] < 0).sum().sum()), 0)
         box = conn.execute("SELECT SUM(quantity) FROM stock_movements WHERE reason = 'Old faulty box counted at go-live'")
         self.assertGreater(box.fetchone()[0], 0)
+        from tracker import recovery
+        series = set(recovery.monthly(db.movements_df(conn), db.claims_df(conn))["series"])
+        self.assertEqual(series, {"Recorded as faulty", "Got back from suppliers", "Missing at stock count"})
 
 
 if __name__ == "__main__":

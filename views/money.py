@@ -1,10 +1,11 @@
-"""Loss & recovery (manager) — how much faulty and missing stock cost, and how much came back."""
+"""Money (manager) — what faulty and missing stock cost, what came back, and what to act on."""
 from datetime import date
 
 import altair as alt
 import streamlit as st
 
-from tracker import db, recovery, stock
+from tracker import analytics, db, recovery, stock
+from tracker.policy import PART_GRADES, PART_TYPES
 from tracker.seed import GO_LIVE
 from tracker.state import get_connection
 
@@ -14,20 +15,19 @@ conn = get_connection()
 items, moves, claims = db.items(conn), db.movements_df(conn), db.claims_df(conn)
 sales, levels = db.sales_df(conn), stock.levels_df(conn)
 
-st.title("💶 Loss & recovery")
-st.caption("Every faulty or missing unit, valued at cost: what came back from suppliers, what's still to recover, "
-           "and what was lost.")
+st.title("💶 Money")
+st.caption("Faulty and missing stock at cost: what went faulty, what we got back, and what's still to get back.")
 
 s = recovery.summary(moves, claims, levels, items)
 k1, k2, k3, k4, k5 = st.columns(5)
-k1.metric(f"Faulty stock ({s['faulty_units']} units)", f"€{s['faulty_value']:,.0f}",
-          help="Everything that went into the faulty bin, at cost")
-k2.metric(f"Recovered ({s['recovered'] / max(s['faulty_value'], 1):.0%})", f"€{s['recovered']:,.0f}",
-          help="Credit notes, refunds and replacement stock from suppliers")
-k3.metric("Still to recover", f"€{s['in_bin'] + s['with_suppliers']:,.0f}",
-          help="In the faulty bin or sent and waiting for the supplier")
-k4.metric("Written off", f"€{s['written_off']:,.0f}", help="Rejected by suppliers")
-k5.metric("Unexplained", f"€{s['unexplained']:,.0f}", help="Missing at stock counts and never found")
+k1.metric(f"Went faulty ({s['faulty_units']} units)", f"€{s['faulty_value']:,.0f}",
+          help="Everything that went into the faulty box, at cost")
+k2.metric(f"Got back ({s['recovered'] / max(s['faulty_value'], 1):.0%})", f"€{s['recovered']:,.0f}",
+          help="Credit, refunds and replacement stock from suppliers")
+k3.metric("Still to get back", f"€{s['in_bin'] + s['with_suppliers']:,.0f}",
+          help="In the faulty box, or sent back and waiting for the supplier")
+k4.metric("Written off", f"€{s['written_off']:,.0f}", help="Refused by suppliers")
+k5.metric("Missing", f"€{s['unexplained']:,.0f}", help="Missing at stock counts and never found")
 
 with st.container(border=True):
     st.markdown("**What the data says**")
@@ -40,7 +40,7 @@ with c1:
     mo = recovery.monthly(moves, claims)
     mo["label"] = mo["month"].dt.strftime("%b") + mo["month"].dt.month.map({7: " (go-live)"}).fillna("")
     order = list(dict.fromkeys(mo.sort_values("month")["label"]))
-    series = ["Recorded as faulty", "Recovered from suppliers", "Missing at stock count"]
+    series = ["Recorded as faulty", "Got back from suppliers", "Missing at stock count"]
     bars = alt.Chart(mo).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
         x=alt.X("label:N", sort=order, title=None, axis=alt.Axis(labelAngle=0)),
         xOffset=alt.XOffset("series:N", sort=series),
@@ -95,10 +95,35 @@ st.dataframe(
 
 st.subheader("Suppliers")
 st.dataframe(recovery.by_supplier(claims), hide_index=True, width="stretch",
-             column_config={"supplier": "Supplier", "units_sent": "Units sent",
-                            "value_sent": st.column_config.NumberColumn("Value sent", format="€%.0f"),
+             column_config={"supplier": "Supplier", "units_sent": "Units sent back",
+                            "value_sent": st.column_config.NumberColumn("Value", format="€%.0f"),
                             "accepted_rate": st.column_config.ProgressColumn("Accepted", format="percent",
                                                                              min_value=0, max_value=1),
-                            "avg_days_to_settle": st.column_config.NumberColumn("Days to settle", format="%.0f"),
-                            "recovered": st.column_config.NumberColumn("Recovered", format="€%.0f"),
-                            "still_open": st.column_config.NumberColumn("Still open", format="€%.0f")})
+                            "avg_days_to_settle": st.column_config.NumberColumn("Days to reply", format="%.0f"),
+                            "recovered": st.column_config.NumberColumn("Got back", format="€%.0f"),
+                            "still_open": st.column_config.NumberColumn("Still waiting", format="€%.0f")})
+
+st.subheader("Repair comebacks")
+returns = db.returns_df(conn)
+m = analytics.part_grade_matrix(returns, sales)
+if len(m):
+    left, right = st.columns([1.2, 1])
+    with left:
+        base = alt.Chart(m).encode(
+            x=alt.X("part_grade:N", sort=PART_GRADES, title=None,
+                    axis=alt.Axis(labelAngle=0, orient="top", labelExpr="split(datum.label, ' ')[0]")),
+            y=alt.Y("part:N", sort=PART_TYPES, title=None))
+        heat = base.mark_rect(cornerRadius=4, stroke="white", strokeWidth=2).encode(
+            color=alt.Color("rate:Q", legend=None,
+                            scale=alt.Scale(range=["#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#104281"])),
+            tooltip=[alt.Tooltip("part:N", title="Part"), alt.Tooltip("part_grade:N", title="Grade"),
+                     alt.Tooltip("rate:Q", title="Comeback rate", format=".1%"),
+                     alt.Tooltip("returns:Q", title="Came back"), alt.Tooltip("units:Q", title="Jobs")])
+        text = base.mark_text(fontWeight=600).encode(
+            text=alt.Text("rate:Q", format=".1%"),
+            color=alt.condition(alt.datum.rate > 0.06, alt.value("white"), alt.value("#0b0b0b")))
+        st.altair_chart((heat + text).properties(height=260), use_container_width=True)
+        st.caption("Share of repairs that came back, by part and grade (genuine, premium or standard aftermarket).")
+    with right:
+        for line in analytics.insights(returns, sales)[:2]:   # grade comparison and worst repair
+            st.markdown(f"- {line}")

@@ -20,7 +20,7 @@ if flash := st.session_state.pop("stock_flash", None):
 GROUP_ORDER = ["Audio", "Smartwatches", "Gaming", "Toys & gadgets", "Charging", "Power banks",
                "Cases & protection", "Phones", "Repair parts"]
 
-levels_tab, count_tab, history_tab = st.tabs(["Stock levels", "Stock count", "Movement history"])
+levels_tab, count_tab, history_tab = st.tabs(["Stock levels", "Count stock", "Who did what"])
 
 with levels_tab:
     f1, f2, f3 = st.columns([1.4, 1.4, 1])
@@ -42,9 +42,9 @@ with levels_tab:
         view = view[view[stock.BIN] > 0]
     k1, k2, k3 = st.columns(3)
     k1.metric("Units on the shelf", f"{int(view[stock.SHELF].sum()):,}")
-    k2.metric("Units in the faulty bin", f"{int(view[stock.BIN].sum()):,}",
+    k2.metric("Units in the faulty box", f"{int(view[stock.BIN].sum()):,}",
               help="Faulty units waiting to go back to the supplier")
-    k3.metric("Faulty bin value", f"€{view['faulty_value'].sum():,.0f}")
+    k3.metric("Faulty box value", f"€{view['faulty_value'].sum():,.0f}")
     st.dataframe(
         view[["label", "subcategory", "supplier", stock.SHELF, "reorder_level", "low", stock.BIN,
               stock.WITH_SUPPLIER, "faulty_value"]].sort_values([stock.BIN, "label"], ascending=[False, True]),
@@ -53,13 +53,13 @@ with levels_tab:
                        stock.SHELF: st.column_config.NumberColumn("On shelf"),
                        "reorder_level": st.column_config.NumberColumn("Reorder at"),
                        "low": st.column_config.CheckboxColumn("Low"),
-                       stock.BIN: st.column_config.NumberColumn("Faulty bin"),
-                       stock.WITH_SUPPLIER: st.column_config.NumberColumn("With supplier"),
+                       stock.BIN: st.column_config.NumberColumn("Faulty box"),
+                       stock.WITH_SUPPLIER: st.column_config.NumberColumn("Sent back"),
                        "faulty_value": st.column_config.NumberColumn("Faulty value", format="€%.2f")})
 
 with count_tab:
-    st.markdown("Count what's physically on the shelf. The app compares it with the system and records any "
-                "difference with your name, so missing stock is never just \"gone\".")
+    st.markdown("Count what's on the shelf. Any difference from the system is recorded with your name, "
+                "so missing stock is never just \"gone\".")
     with st.container(border=True):
         a, b = st.columns([1, 2])
         group = a.selectbox("Group", GROUP_ORDER, index=None, placeholder="All groups", key="count-group")
@@ -76,8 +76,7 @@ with count_tab:
             note = st.text_input("Note (optional)", max_chars=120, key="count-note",
                                  placeholder="e.g. 2 found in the old faulty box")
             if diff < 0:
-                st.warning(f"{-diff} unit(s) missing. Check the faulty box and recent swaps in Movement history "
-                           "before saving.", icon="🔎")
+                st.warning(f"{-diff} unit(s) missing. Check the faulty box and Who did what before saving.", icon="🔎")
             if st.button("Save count", type="primary", key="count-save"):
                 stock.stock_count(conn, date.today(), int(row["id"]), int(counted), user["id"], note=note.strip() or None)
                 conn.commit()
@@ -99,9 +98,9 @@ with history_tab:
         view = view[view["reason"].isin(reasons)]
     if who:
         view = view[view["staff"].isin(who)]
-    names = {stock.SHELF: "Shelf", stock.BIN: "Faulty bin", stock.WITH_SUPPLIER: "With supplier",
+    names = {stock.SHELF: "Shelf", stock.BIN: "Faulty box", stock.WITH_SUPPLIER: "Sent back",
              stock.SUPPLIER: "Supplier", stock.CUSTOMER: "Customer", stock.WRITTEN_OFF: "Written off",
-             stock.UNEXPLAINED: "Unexplained"}
+             stock.UNEXPLAINED: "Missing"}
     view = view.assign(from_loc=view["from_loc"].map(names), to_loc=view["to_loc"].map(names))
     st.caption(f"{len(view):,} movements")
     st.dataframe(view[["moved_date", "item", "quantity", "from_loc", "to_loc", "reason", "staff", "note"]],

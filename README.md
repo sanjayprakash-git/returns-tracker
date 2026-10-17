@@ -9,7 +9,7 @@ This app makes the right thing the fastest thing. A **faulty swap takes one 10-s
 **Live demo:** _link coming after deployment_ · **Requirements:** [docs/requirements.md](docs/requirements.md)
 **Try it:** the sign-in page has one-click **Try as Manager / Technician / Sales** buttons. All data, staff and supplier names are fictional.
 
-![Loss & recovery](screenshots/recovery-top.png)
+![Money page](screenshots/money-top.png)
 
 ---
 
@@ -31,7 +31,7 @@ At the go-live stock count, **82 units** missing from the shelf turned out to be
 ```mermaid
 flowchart LR
     A[Faulty return] -->|Counter: 10-second swap| B[Replacement off shelf]
-    A --> C[(Faulty bin)]
+    A --> C[(Faulty box)]
     D[Damaged delivery] --> C
     E[Fails pre-sale test] --> C
     F[Repair comeback part] --> C
@@ -42,33 +42,32 @@ flowchart LR
 
 **Every unit that moves is recorded** (from → to, why, when, who) in a stock ledger. Stock in any location is calculated from that ledger and never typed over. That's what answers "where did it go and who took it", and why a stock count difference is always traceable.
 
-| Page | For | What it does |
-|---|---|---|
-| **🔁 Counter** | Sales staff | Faulty swap / refund in one step (warranty check, shelf count); book in deliveries with damaged units; move faulty units off the shelf |
-| **📦 Stock** | Everyone | Units on the shelf, in the faulty bin and with suppliers; low-stock flags; stock count with difference in units and €; full movement history by item, movement type and person |
-| **♻️ Faulty bin & suppliers** | Everyone | Bin grouped by supplier with how long units have waited; send everything to a supplier in one step; record replacement stock, credit, refund or rejection; supplier scorecard |
-| **💶 Loss & recovery** | Manager | Faulty value, recovered, still to recover, written off, unexplained; before/after go-live by month; how stock ends up faulty; fault rate by product; supplier performance; written insights |
-| **📝 Repair comebacks & returns** | Technicians & staff | Repair comebacks by device · part · grade with 90-day warranty and responsibility; phone and non-faulty returns |
-| **📊 Repair comebacks** | Manager | Comeback rate by part × grade, worst repairs, bad-batch alerts |
+Four pages, one flow:
 
-| Counter: faulty swap | Faulty bin, grouped by supplier |
+| Page | Who | What it does |
+|---|---|---|
+| **🔁 Counter** | Staff | Search the item, choose what happened: *Faulty – swap*, *Faulty – refund*, *Returned OK*, *Delivery in* (with damaged units), *Found faulty*, or *Repair comeback* for repair parts. One button; details like fault and receipt date are optional |
+| **♻️ Faulty box** | Staff | What's waiting, grouped by supplier and flagged after 30 days; *Send back* in one step; when the supplier replies: *New stock*, *Credit / refund* or *Refused* |
+| **📦 Stock** | Staff + manager | Units on the shelf, in the faulty box and sent back; count stock (difference in units and €); *Who did what* history |
+| **💶 Money** | Manager | Went faulty, got back, still to get back, written off, missing; before/after go-live; products that fail most; supplier scorecard; repair comeback rates by part and grade |
+
+| Counter: faulty swap | Faulty box, grouped by supplier |
 |---|---|
-| ![Counter](screenshots/counter.png) | ![Faulty bin](screenshots/bin.png) |
-| **Movement history: who moved what** | **Stock levels** |
+| ![Counter](screenshots/counter.png) | ![Faulty box](screenshots/box.png) |
+| **Stock: who did what** | **Stock levels** |
 | ![Movement history](screenshots/history.png) | ![Stock](screenshots/stock.png) |
 
 <details>
-<summary>Full Loss & recovery page, and the repair comebacks dashboard</summary>
+<summary>Full Money page</summary>
 
-![Loss & recovery](screenshots/recovery.png)
-![Repair comebacks](screenshots/repair-dashboard.png)
+![Money](screenshots/money.png)
 
 </details>
 
 ## How I approached it
 
 1. **Started from a real problem.** I work in phone retail, and the swap-and-forget pattern for faulty earbuds is something I've seen happen. I wrote it up as a [requirements document](docs/requirements.md): problem statement, success measures, stakeholders, 17 user stories with acceptance criteria, business rules, data model, and current vs future process.
-2. **Designed for adoption.** The counter flow is one screen and one button, because if recording a swap is slower than not recording it, it won't happen.
+2. **Designed for adoption.** The counter is one search, one tap on what happened, and one button, because if recording a swap is slower than not recording it, it won't happen. A first version had seven pages; I cut it to four after reviewing it from a sales assistant's point of view.
 3. **Chose a movement ledger over a stock number,** so every difference is explainable.
 4. **Built and tested it.** Python, Streamlit and SQLite, with 20 automated tests on the stock rules (swaps, damaged deliveries, supplier returns, stock counts) and the policy rules, plus end-to-end checks in a browser.
 
@@ -88,12 +87,12 @@ Demo data is generated on first start; delete `data/returns.db` to regenerate it
 
 ```
 app.py                  Sign-in and role-based navigation
-views/                  Counter, stock, faulty bin & suppliers, loss & recovery, returns, repair dashboard
+views/                  Counter, faulty box, stock, money
 tracker/stock.py        Stock ledger: swaps, deliveries, supplier returns, stock counts, levels
 tracker/recovery.py     Loss & recovery figures, fault rates, supplier scorecard, insights
 tracker/db.py           SQLite schema and queries
 tracker/policy.py       Warranty and returns rules, reasons, responsibility
-tracker/analytics.py    Repair comeback analysis
+tracker/analytics.py    Repair comeback rates by part and grade
 tracker/auth.py         Sign-in (salted PBKDF2 hashes) and demo accounts
 tracker/seed.py         Demo data: six months of a shop, before and after the app
 tests/                  Stock, policy, analytics, auth and seed tests

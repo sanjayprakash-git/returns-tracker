@@ -97,7 +97,7 @@ def monthly(moves, claims) -> pd.DataFrame:
         "Missing at stock count": m[m["to_loc"] == stock.UNEXPLAINED].groupby("month")["value"].sum(),
     }
     closed = claims[claims["status"] == "Closed"]
-    rows["Recovered from suppliers"] = closed.groupby(closed["resolved_date"].dt.to_period("M"))["recovered"].sum()
+    rows["Got back from suppliers"] = closed.groupby(closed["resolved_date"].dt.to_period("M"))["recovered"].sum()
     df = pd.DataFrame(rows).fillna(0)
     df.index = df.index.to_timestamp()
     return df.reset_index(names="month").melt("month", var_name="series", value_name="value")
@@ -126,7 +126,7 @@ def insights(moves, claims, sales, levels, items, go_live, today) -> list[str]:
                    f"**{acc(later):.0%}** is accepted.")
     after = m[(m["moved_date"] > gl) & (m["to_loc"] == stock.UNEXPLAINED)]
     out.append(f"Month-end counts since go-live: only **{int(after['quantity'].sum())} units "
-               f"(€{after['value'].sum():,.0f})** unexplained, against €{count['value'].sum():,.0f} at go-live.")
+               f"(€{after['value'].sum():,.0f})** missing, against €{count['value'].sum():,.0f} at go-live.")
     prod = by_product(moves, claims, sales, levels, since=go_live)
     prod = prod[(prod["category"] == "Accessory") & (prod["sold"] >= 30)].sort_values("fault_rate", ascending=False)
     if len(prod):
@@ -139,6 +139,5 @@ def insights(moves, claims, sales, levels, items, go_live, today) -> list[str]:
     bin_units = int(held[stock.BIN].clip(lower=0).sum())
     if bin_units:
         bin_value = float((held[stock.BIN].clip(lower=0) * cost.reindex(held.index)).sum())
-        out.append(f"**{bin_units} units (€{bin_value:,.0f})** are in the faulty bin now. Send them in the next "
-                   "monthly supplier return.")
+        out.append(f"**{bin_units} units (€{bin_value:,.0f})** are in the faulty box now. Send them back this month.")
     return out

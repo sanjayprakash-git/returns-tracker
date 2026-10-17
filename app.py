@@ -29,8 +29,8 @@ def sign_in():
                 if col.button(f"Try as {role}", width="stretch", key=f"demo-{username}"):
                     st.session_state.user = demo_user(conn, username)
                     st.rerun()
-            st.caption("The manager also sees Loss & recovery and the repair dashboard. Demo data, staff and "
-                       "supplier names are fictional.")
+            st.caption("Staff use Counter, Faulty box and Stock; the manager also sees Money. "
+                       "Demo data, staff and supplier names are fictional.")
 
 
 user = st.session_state.get("user")
@@ -45,16 +45,11 @@ with st.sidebar:
         st.rerun()
 
 is_manager = user["role"] == "manager"
-pages = {"Daily work": [
+pages = [
     st.Page("views/counter.py", title="Counter", icon="🔁", default=not is_manager),
-    st.Page("views/log_return.py", title="Repair comebacks & returns", icon="📝"),
+    st.Page("views/faulty_box.py", title="Faulty box", icon="♻️"),
     st.Page("views/stock_view.py", title="Stock", icon="📦"),
-    st.Page("views/supplier_claims.py", title="Faulty bin & suppliers", icon="♻️"),
-    st.Page("views/returns_log.py", title="Returns log", icon="📋"),
-]}
+]
 if is_manager:
-    pages["Manager"] = [
-        st.Page("views/recovery_view.py", title="Loss & recovery", icon="💶", default=True),
-        st.Page("views/dashboard.py", title="Repair comebacks", icon="📊"),
-    ]
+    pages.insert(0, st.Page("views/money.py", title="Money", icon="💶", default=True))
 st.navigation(pages).run()
